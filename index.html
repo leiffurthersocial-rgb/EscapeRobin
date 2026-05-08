@@ -1,1102 +1,1305 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Escape Robin</title>
-  <style>
-    :root {
-      --bg: #08111f;
-      --panel: rgba(15, 23, 42, 0.88);
-      --panel-2: rgba(30, 41, 59, 0.7);
-      --text: #f8fafc;
-      --muted: #94a3b8;
-      --accent: #38bdf8;
-      --accent-2: #0ea5e9;
-      --danger: #ef4444;
-      --success: #10b981;
-      --wall: #1f2a3d;
-      --wall-border: #334155;
-      --floor: #0b1220;
-    }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 
-    * { box-sizing: border-box; }
+<title>Escape Robin</title>
 
-    html, body {
-      margin: 0;
-      width: 100%;
-      height: 100%;
-      background:
-        radial-gradient(circle at top, rgba(56,189,248,0.12), transparent 35%),
-        radial-gradient(circle at bottom, rgba(239,68,68,0.08), transparent 30%),
-        var(--bg);
-      color: var(--text);
-      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      overflow: hidden;
-      display: grid;
-      place-items: center;
-    }
+<style>
+:root{
+    --bg:#08111f;
+    --panel:rgba(15,23,42,.88);
+    --text:#f8fafc;
+    --muted:#94a3b8;
+    --accent:#38bdf8;
+    --danger:#ef4444;
+    --success:#10b981;
+}
 
-    #game-container {
-      width: min(100vw, 840px);
-      position: relative;
-      border-radius: 16px;
-      overflow: hidden;
-      box-shadow: 0 20px 80px rgba(0, 0, 0, 0.55);
-      border: 1px solid rgba(148,163,184,0.15);
-      background: rgba(2,6,23,0.5);
-    }
+*{
+    box-sizing:border-box;
+}
 
-    canvas {
-      display: block;
-      width: 100%;
-      height: auto;
-      aspect-ratio: 14 / 10;
-      background: #07101d;
-    }
+body{
+    margin:0;
+    overflow:hidden;
+    background:radial-gradient(circle at top,#13233f,#08111f);
+    color:var(--text);
+    font-family:Segoe UI,sans-serif;
 
-    .ui-layer {
-      position: absolute;
-      inset: 0;
-      display: grid;
-      place-items: center;
-      padding: 24px;
-      background: linear-gradient(to bottom, rgba(2,6,23,0.72), rgba(15,23,42,0.92));
-      backdrop-filter: blur(7px);
-      z-index: 10;
-      transition: opacity .2s ease;
-      text-align: center;
-    }
+    display:flex;
+    justify-content:center;
+    align-items:center;
 
-    .hidden {
-      display: none !important;
-      opacity: 0;
-      pointer-events: none;
-    }
+    height:100vh;
+}
 
-    .panel {
-      width: min(92%, 620px);
-      border: 1px solid rgba(148,163,184,0.16);
-      border-radius: 18px;
-      background: linear-gradient(180deg, rgba(15,23,42,0.82), rgba(15,23,42,0.72));
-      box-shadow: 0 10px 40px rgba(0,0,0,0.35);
-      padding: 24px 22px 20px;
-    }
+#game-container{
+    position:relative;
+    width:min(95vw,840px);
 
-    h1 {
-      margin: 0 0 8px;
-      font-size: clamp(2rem, 5vw, 3.3rem);
-      text-transform: uppercase;
-      letter-spacing: 2px;
-      text-shadow: 0 0 18px rgba(56,189,248,0.25);
-    }
+    border-radius:18px;
+    overflow:hidden;
 
-    h1 .robin {
-      color: var(--danger);
-      text-shadow: 0 0 18px rgba(239,68,68,0.5);
-    }
+    box-shadow:
+        0 20px 70px rgba(0,0,0,.6);
+}
 
-    h2 {
-      margin: 8px 0 0;
-      font-size: 1.3rem;
-      font-weight: 700;
-      color: var(--text);
-    }
+canvas{
+    display:block;
+    width:100%;
+    height:auto;
+    background:#07101d;
+}
 
-    p {
-      color: var(--muted);
-      margin: 10px 0;
-      line-height: 1.5;
-    }
+.ui-layer{
+    position:absolute;
+    inset:0;
 
-    .character-select {
-      display: flex;
-      gap: 14px;
-      justify-content: center;
-      flex-wrap: wrap;
-      margin: 20px 0 18px;
-    }
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
 
-    .char-card {
-      width: 130px;
-      border: 1px solid rgba(148,163,184,0.16);
-      border-radius: 14px;
-      padding: 10px;
-      background: rgba(255,255,255,0.04);
-      cursor: pointer;
-      transition: transform .15s ease, background .15s ease, border-color .15s ease;
-      user-select: none;
-    }
+    background:rgba(0,0,0,.75);
 
-    .char-card:hover {
-      transform: translateY(-4px);
-      background: rgba(255,255,255,0.07);
-    }
+    z-index:10;
 
-    .char-card.selected {
-      border-color: rgba(56,189,248,0.8);
-      box-shadow: 0 0 0 1px rgba(56,189,248,0.35), 0 0 22px rgba(56,189,248,0.18);
-    }
+    text-align:center;
 
-    .char-card img {
-      width: 100%;
-      aspect-ratio: 1 / 1;
-      object-fit: cover;
-      border-radius: 10px;
-      display: block;
-      margin-bottom: 8px;
-      background: rgba(255,255,255,0.06);
-    }
+    padding:20px;
+}
 
-    button {
-      appearance: none;
-      border: 0;
-      border-radius: 12px;
-      padding: 12px 20px;
-      cursor: pointer;
-      color: white;
-      font-weight: 800;
-      font-size: 1rem;
-      letter-spacing: .6px;
-      text-transform: uppercase;
-      background: linear-gradient(180deg, var(--accent), var(--accent-2));
-      box-shadow: 0 8px 26px rgba(14,165,233,0.22);
-      transition: transform .15s ease, filter .15s ease;
-    }
+.hidden{
+    display:none!important;
+}
 
-    button:hover {
-      transform: translateY(-1px);
-      filter: brightness(1.05);
-    }
+h1{
+    margin:0;
+    font-size:3rem;
+    text-transform:uppercase;
+}
 
-    .button-row {
-      display: flex;
-      gap: 10px;
-      justify-content: center;
-      flex-wrap: wrap;
-      margin-top: 14px;
-    }
+.robin{
+    color:var(--danger);
+}
 
-    .instructions {
-      margin-top: 16px;
-      color: var(--muted);
-      font-size: 0.95rem;
-    }
+button{
+    padding:12px 24px;
+    border:none;
+    border-radius:10px;
 
-    #hud {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      padding: 12px 14px;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 12px;
-      z-index: 5;
-      pointer-events: none;
-      background: linear-gradient(to bottom, rgba(0,0,0,0.72), rgba(0,0,0,0));
-      font-weight: 700;
-      text-shadow: 0 1px 2px rgba(0,0,0,0.85);
-    }
+    background:var(--accent);
+    color:white;
 
-    .hud-left, .hud-right {
-      display: grid;
-      gap: 4px;
-      font-size: 1rem;
-    }
+    cursor:pointer;
 
-    .hud-label {
-      color: var(--muted);
-      font-weight: 700;
-      font-size: 0.85rem;
-      letter-spacing: .3px;
-    }
+    font-weight:bold;
+    font-size:1rem;
 
-    .hud-value {
-      font-size: 1.02rem;
-      color: var(--text);
-    }
+    margin-top:15px;
+}
 
-    #anger-bar-container {
-      width: 180px;
-      height: 10px;
-      border-radius: 999px;
-      background: rgba(148,163,184,0.22);
-      overflow: hidden;
-      margin-top: 6px;
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
-    }
+button:hover{
+    filter:brightness(1.1);
+}
 
-    #anger-bar {
-      width: 0%;
-      height: 100%;
-      border-radius: inherit;
-      background: linear-gradient(90deg, #fb7185, #ef4444);
-      transition: width 0.08s linear;
-    }
+.character-select{
+    display:flex;
+    gap:16px;
+    margin:24px 0;
+    flex-wrap:wrap;
+    justify-content:center;
+}
 
-    .tiny {
-      font-size: 0.85rem;
-      color: var(--muted);
-    }
-  </style>
+.char-card{
+    width:120px;
+    background:rgba(255,255,255,.06);
+    border:2px solid transparent;
+    border-radius:12px;
+    padding:10px;
+
+    cursor:pointer;
+
+    transition:.2s;
+}
+
+.char-card.selected{
+    border-color:var(--accent);
+}
+
+.char-card:hover{
+    transform:translateY(-4px);
+}
+
+.char-card img{
+    width:100%;
+    border-radius:8px;
+    aspect-ratio:1/1;
+    object-fit:cover;
+}
+
+#hud{
+    position:absolute;
+    top:0;
+    left:0;
+    width:100%;
+
+    display:flex;
+    justify-content:space-between;
+
+    padding:14px;
+
+    z-index:5;
+
+    font-weight:bold;
+
+    background:linear-gradient(to bottom,
+        rgba(0,0,0,.7),
+        transparent);
+}
+
+#anger-bar-container{
+    width:180px;
+    height:10px;
+
+    background:#333;
+
+    border-radius:999px;
+
+    overflow:hidden;
+
+    margin-top:6px;
+}
+
+#anger-bar{
+    width:0%;
+    height:100%;
+
+    background:linear-gradient(
+        90deg,
+        #fb7185,
+        #ef4444
+    );
+}
+</style>
 </head>
+
 <body>
-  <div id="game-container">
+
+<div id="game-container">
+
     <div id="hud" class="hidden">
-      <div class="hud-left">
-        <div><span class="hud-label">Score</span> <span class="hud-value" id="ui-score">0</span></div>
-        <div><span class="hud-label">Best</span> <span class="hud-value" id="ui-best">0</span></div>
-      </div>
-      <div class="hud-right" style="text-align:right;">
-        <div><span class="hud-label">Level</span> <span class="hud-value" id="ui-level">1</span></div>
+
         <div>
-          <span class="hud-label">Robin’s Anger</span>
-          <div id="anger-bar-container"><div id="anger-bar"></div></div>
+            Score:
+            <span id="ui-score">0</span>
         </div>
-      </div>
+
+        <div>
+            Level:
+            <span id="ui-level">1</span>
+        </div>
+
+        <div style="text-align:right;">
+            Robin Anger
+            <div id="anger-bar-container">
+                <div id="anger-bar"></div>
+            </div>
+        </div>
     </div>
 
+    <!-- MENU -->
     <div id="main-menu" class="ui-layer">
-      <div class="panel">
-        <h1>Escape <span class="robin">Robin</span></h1>
-        <p>Procedurally generated endless mode. Every level is solvable. Robin gets faster, but never unfairly faster than you.</p>
 
-        <p class="tiny">Choose a character</p>
+        <h1>
+            Escape
+            <span class="robin">Robin</span>
+        </h1>
+
+        <p>Select Character</p>
+
         <div class="character-select">
-          <div class="char-card selected" data-char="leif">
-            <img src="leif.jpeg" alt="Leif" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2780%27 height=%2780%27%3E%3Crect width=%2780%27 height=%2780%27 fill=%27%2338bdf8%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 dominant-baseline=%27middle%27 text-anchor=%27middle%27 fill=%27white%27 font-size=%2720%27%3ELeif%3C/text%3E%3C/svg%3E'">
-            <div>Leif</div>
-          </div>
-          <div class="char-card" data-char="lennard">
-            <img src="lennard.jpeg" alt="Lennard" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2780%27 height=%2780%27%3E%3Crect width=%2780%27 height=%2780%27 fill=%27%238b5cf6%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 dominant-baseline=%27middle%27 text-anchor=%27middle%27 fill=%27white%27 font-size=%2714%27%3ELennard%3C/text%3E%3C/svg%3E'">
-            <div>Lennard</div>
-          </div>
-          <div class="char-card" data-char="erim">
-            <img src="erim.jpeg" alt="Erim" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2780%27 height=%2780%27%3E%3Crect width=%2780%27 height=%2780%27 fill=%27%2310b981%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 dominant-baseline=%27middle%27 text-anchor=%27middle%27 fill=%27white%27 font-size=%2720%27%3EErim%3C/text%3E%3C/svg%3E'">
-            <div>Erim</div>
-          </div>
+
+            <div class="char-card selected"
+                 data-char="leif">
+
+                <img src="leif.jpeg">
+                <div>Leif</div>
+            </div>
+
+            <div class="char-card"
+                 data-char="lennard">
+
+                <img src="lennard.jpeg">
+                <div>Lennard</div>
+            </div>
+
+            <div class="char-card"
+                 data-char="erim">
+
+                <img src="erim.jpeg">
+                <div>Erim</div>
+            </div>
         </div>
 
-        <div class="button-row">
-          <button id="start-btn">Start Game</button>
-        </div>
+        <button id="start-btn">
+            Start Game
+        </button>
 
-        <div class="instructions">
-          Move with WASD or Arrow Keys.<br>
-          Reach the green exit before Robin catches you.<br>
-          Press P to pause.
-        </div>
-      </div>
+        <p style="max-width:500px;color:var(--muted)">
+            WASD / Arrow Keys to move.<br>
+            Hold SHIFT to hide.<br>
+            Hidden players cannot move,
+            but Robin loses track of you.
+        </p>
     </div>
 
-    <div id="pause-menu" class="ui-layer hidden">
-      <div class="panel">
-        <h1>Paused</h1>
-        <p>The chase is frozen.</p>
-        <div class="button-row">
-          <button id="resume-btn">Resume</button>
-          <button id="pause-restart-btn">Restart</button>
-        </div>
-      </div>
+    <!-- GAME OVER -->
+    <div id="game-over-menu"
+         class="ui-layer hidden">
+
+        <h1>
+            Game
+            <span class="robin">Over</span>
+        </h1>
+
+        <h2>
+            Robin caught you.
+        </h2>
+
+        <p>
+            Final Score:
+            <span id="final-score">
+                0
+            </span>
+        </p>
+
+        <button id="restart-btn">
+            Play Again
+        </button>
     </div>
 
-    <div id="game-over-menu" class="ui-layer hidden">
-      <div class="panel">
-        <h1>Game <span class="robin">Over</span></h1>
-        <h2>Robin caught you.</h2>
-        <p>Final Score: <span id="final-score" style="color:var(--accent); font-weight:800;">0</span></p>
-        <div class="button-row">
-          <button id="restart-btn">Play Again</button>
-        </div>
-      </div>
+    <!-- LEVEL -->
+    <div id="level-transition"
+         class="ui-layer hidden">
+
+        <h1>
+            Level
+            <span id="transition-level">
+                2
+            </span>
+        </h1>
+
+        <p>
+            Robin is adapting...
+        </p>
     </div>
 
-    <div id="level-transition" class="ui-layer hidden">
-      <div class="panel">
-        <h1>Level <span id="transition-level">2</span></h1>
-        <p>Robin is adapting to your route...</p>
-      </div>
-    </div>
+    <canvas id="gameCanvas"
+            width="840"
+            height="600"></canvas>
 
-    <canvas id="gameCanvas" width="840" height="600"></canvas>
-  </div>
+</div>
 
-  <script>
-    // ----------------------------
-    // Assets
-    // ----------------------------
-    const assets = {
-      robin: new Image(),
-      leif: new Image(),
-      lennard: new Image(),
-      erim: new Image()
+<script>
+// ========================================
+// Assets
+// ========================================
+const assets = {
+    robin:new Image(),
+    leif:new Image(),
+    lennard:new Image(),
+    erim:new Image()
+};
+
+assets.robin.src="robin.jpeg";
+assets.leif.src="leif.jpeg";
+assets.lennard.src="lennard.jpeg";
+assets.erim.src="erim.jpeg";
+
+// ========================================
+// Canvas
+// ========================================
+const canvas =
+    document.getElementById("gameCanvas");
+
+const ctx =
+    canvas.getContext("2d");
+
+const TILE=40;
+const COLS=21;
+const ROWS=15;
+
+// ========================================
+// UI
+// ========================================
+const uiMainMenu =
+    document.getElementById("main-menu");
+
+const uiGameOver =
+    document.getElementById("game-over-menu");
+
+const uiTransition =
+    document.getElementById("level-transition");
+
+const uiHud =
+    document.getElementById("hud");
+
+const uiScore =
+    document.getElementById("ui-score");
+
+const uiLevel =
+    document.getElementById("ui-level");
+
+const uiAngerBar =
+    document.getElementById("anger-bar");
+
+const uiFinalScore =
+    document.getElementById("final-score");
+
+// ========================================
+// Game State
+// ========================================
+let gameState="MENU";
+
+let selectedCharacter="leif";
+
+let currentMap=[];
+
+let level=1;
+let score=0;
+let survivalTime=0;
+
+let exitTile={x:1,y:1};
+
+let lastTime=0;
+
+// ========================================
+// Player
+// ========================================
+const player={
+    x:0,
+    y:0,
+    width:30,
+    height:30,
+
+    speed:220,
+
+    hidden:false,
+    hideTimer:0
+};
+
+// ========================================
+// Robin
+// ========================================
+const robin={
+    x:0,
+    y:0,
+    width:30,
+    height:30,
+
+    speed:130,
+
+    anger:0,
+
+    path:[],
+    pathIndex:0,
+
+    repath:0,
+
+    wandering:false,
+    wanderDir:{x:0,y:0},
+    wanderTimer:0
+};
+
+// ========================================
+// Input
+// ========================================
+const keys={
+    w:false,a:false,s:false,d:false,
+    ArrowUp:false,
+    ArrowLeft:false,
+    ArrowDown:false,
+    ArrowRight:false,
+    Shift:false
+};
+
+window.addEventListener("keydown",e=>{
+    if(keys.hasOwnProperty(e.key)){
+        keys[e.key]=true;
+    }
+});
+
+window.addEventListener("keyup",e=>{
+    if(keys.hasOwnProperty(e.key)){
+        keys[e.key]=false;
+    }
+});
+
+// ========================================
+// Character Select
+// ========================================
+document.querySelectorAll(".char-card")
+.forEach(card=>{
+
+    card.addEventListener("click",()=>{
+
+        document.querySelectorAll(".char-card")
+        .forEach(c=>c.classList.remove("selected"));
+
+        card.classList.add("selected");
+
+        selectedCharacter=
+            card.dataset.char;
+    });
+});
+
+// ========================================
+// Buttons
+// ========================================
+document.getElementById("start-btn")
+.addEventListener("click",startGame);
+
+document.getElementById("restart-btn")
+.addEventListener("click",startGame);
+
+// ========================================
+// Helpers
+// ========================================
+function rand(min,max){
+    return Math.floor(
+        Math.random()*(max-min+1)
+    )+min;
+}
+
+function inside(x,y){
+    return (
+        x>=0 &&
+        y>=0 &&
+        x<COLS &&
+        y<ROWS
+    );
+}
+
+function tileKey(x,y){
+    return `${x},${y}`;
+}
+
+function entityTile(ent){
+    return {
+        x:Math.floor(
+            (ent.x+ent.width/2)/TILE
+        ),
+        y:Math.floor(
+            (ent.y+ent.height/2)/TILE
+        )
     };
-    assets.robin.src = 'robin.jpeg';
-    assets.leif.src = 'leif.jpeg';
-    assets.lennard.src = 'lennard.jpeg';
-    assets.erim.src = 'erim.jpeg';
+}
 
-    // ----------------------------
-    // Canvas / constants
-    // ----------------------------
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-
-    const TILE_SIZE = 40;
-    const COLS = 21;
-    const ROWS = 15;
-    const CELL_COLS = (COLS - 1) / 2; // 10
-    const CELL_ROWS = (ROWS - 1) / 2; // 7
-
-    // ----------------------------
-    // UI
-    // ----------------------------
-    const uiMainMenu = document.getElementById('main-menu');
-    const uiPauseMenu = document.getElementById('pause-menu');
-    const uiGameOver = document.getElementById('game-over-menu');
-    const uiTransition = document.getElementById('level-transition');
-    const uiHud = document.getElementById('hud');
-    const uiScore = document.getElementById('ui-score');
-    const uiBest = document.getElementById('ui-best');
-    const uiLevel = document.getElementById('ui-level');
-    const uiAngerBar = document.getElementById('anger-bar');
-    const uiFinalScore = document.getElementById('final-score');
-    const uiTransitionLevel = document.getElementById('transition-level');
-
-    // ----------------------------
-    // State
-    // ----------------------------
-    const STORAGE_KEY = 'escape_robin_best_score_v2';
-    let bestScore = Number(localStorage.getItem(STORAGE_KEY) || 0);
-
-    let state = 'menu'; // menu, playing, paused, transition, gameover
-    let selectedCharacter = 'leif';
-
-    let levelNumber = 1;
-    let score = 0;
-    let survivalTime = 0;
-
-    let currentMap = [];
-    let exitTile = { x: 1, y: 1 };
-    let transitionEndsAt = 0;
-
-    let lastFrameTime = 0;
-
-    // ----------------------------
-    // Entities
-    // ----------------------------
-    const player = {
-      x: 0,
-      y: 0,
-      width: 28,
-      height: 28,
-      speed: 220,
-      color: '#38bdf8'
+function tileCenter(tx,ty,ent){
+    return {
+        x:tx*TILE+(TILE-ent.width)/2,
+        y:ty*TILE+(TILE-ent.height)/2
     };
+}
 
-    const robin = {
-      x: 0,
-      y: 0,
-      width: 30,
-      height: 30,
-      speed: 120,
-      maxSpeed: 180,
-      anger: 0,
-      path: [],
-      pathIndex: 1,
-      repathTimer: 0,
-      lastPlayerKey: ''
-    };
+function overlap(a,b){
+    return (
+        a.x < b.x+b.width &&
+        a.x+a.width > b.x &&
+        a.y < b.y+b.height &&
+        a.y+a.height > b.y
+    );
+}
 
-    // ----------------------------
-    // Input
-    // ----------------------------
-    const keys = {
-      w: false, a: false, s: false, d: false,
-      ArrowUp: false, ArrowLeft: false, ArrowDown: false, ArrowRight: false
-    };
+// ========================================
+// Collision
+// ========================================
+function wallCollision(rect){
 
-    window.addEventListener('keydown', (e) => {
-      if (Object.prototype.hasOwnProperty.call(keys, e.key)) {
-        keys[e.key] = true;
-      }
+    const left=
+        Math.floor(rect.x/TILE);
 
-      if (e.repeat) return;
+    const right=
+        Math.floor(
+            (rect.x+rect.width-1)/TILE
+        );
 
-      if (e.key.toLowerCase() === 'p') {
-        if (state === 'playing') pauseGame();
-        else if (state === 'paused') resumeGame();
-      }
+    const top=
+        Math.floor(rect.y/TILE);
 
-      if (e.key === 'Escape') {
-        if (state === 'playing') pauseGame();
-        else if (state === 'paused') resumeGame();
-      }
+    const bottom=
+        Math.floor(
+            (rect.y+rect.height-1)/TILE
+        );
+
+    for(let y=top;y<=bottom;y++){
+
+        for(let x=left;x<=right;x++){
+
+            if(!inside(x,y)) return true;
+
+            if(currentMap[y][x]===1){
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+function move(ent,dx,dy){
+
+    ent.x+=dx;
+
+    if(wallCollision(ent)){
+        ent.x-=dx;
+    }
+
+    ent.y+=dy;
+
+    if(wallCollision(ent)){
+        ent.y-=dy;
+    }
+}
+
+// ========================================
+// LEVEL GENERATION
+// ========================================
+function generateLevel(){
+
+    const map=
+        Array.from(
+            {length:ROWS},
+            ()=>Array(COLS).fill(1)
+        );
+
+    // Open many spaces
+    for(let y=1;y<ROWS-1;y++){
+
+        for(let x=1;x<COLS-1;x++){
+
+            map[y][x]=
+                Math.random()<0.65 ? 0 : 1;
+        }
+    }
+
+    // Center arena
+    for(let y=4;y<11;y++){
+
+        for(let x=5;x<16;x++){
+
+            map[y][x]=0;
+        }
+    }
+
+    // Borders
+    for(let x=0;x<COLS;x++){
+        map[0][x]=1;
+        map[ROWS-1][x]=1;
+    }
+
+    for(let y=0;y<ROWS;y++){
+        map[y][0]=1;
+        map[y][COLS-1]=1;
+    }
+
+    // Ensure connectivity
+    const start={x:1,y:1};
+
+    function bfs(){
+
+        const q=[[1,1]];
+
+        const visited=
+            new Set(["1,1"]);
+
+        while(q.length){
+
+            const [cx,cy]=q.shift();
+
+            const dirs=[
+                [1,0],[-1,0],
+                [0,1],[0,-1]
+            ];
+
+            for(const d of dirs){
+
+                const nx=cx+d[0];
+                const ny=cy+d[1];
+
+                if(!inside(nx,ny)) continue;
+                if(map[ny][nx]===1) continue;
+
+                const key=tileKey(nx,ny);
+
+                if(visited.has(key)) continue;
+
+                visited.add(key);
+
+                q.push([nx,ny]);
+            }
+        }
+
+        return visited;
+    }
+
+    let visited=bfs();
+
+    // Connect unreachable zones
+    for(let y=1;y<ROWS-1;y++){
+
+        for(let x=1;x<COLS-1;x++){
+
+            if(
+                map[y][x]===0 &&
+                !visited.has(tileKey(x,y))
+            ){
+                map[y][x]=0;
+
+                if(x>1) map[y][x-1]=0;
+                if(y>1) map[y-1][x]=0;
+            }
+        }
+    }
+
+    visited=bfs();
+
+    // Find far exit
+    let farthest={x:18,y:13,d:0};
+
+    visited.forEach(v=>{
+
+        const [x,y]=v
+            .split(",")
+            .map(Number);
+
+        const d=
+            Math.abs(x-1)+
+            Math.abs(y-1);
+
+        if(d>farthest.d){
+
+            farthest={x,y,d};
+        }
     });
 
-    window.addEventListener('keyup', (e) => {
-      if (Object.prototype.hasOwnProperty.call(keys, e.key)) {
-        keys[e.key] = false;
-      }
-    });
+    // Robin spawn
+    let rx=18;
+    let ry=1;
 
-    // ----------------------------
-    // UI events
-    // ----------------------------
-    document.querySelectorAll('.char-card').forEach(card => {
-      card.addEventListener('click', () => {
-        document.querySelectorAll('.char-card').forEach(c => c.classList.remove('selected'));
-        card.classList.add('selected');
-        selectedCharacter = card.dataset.char;
-      });
-    });
+    for(let i=0;i<200;i++){
 
-    document.getElementById('start-btn').addEventListener('click', startGame);
-    document.getElementById('restart-btn').addEventListener('click', startGame);
-    document.getElementById('resume-btn').addEventListener('click', resumeGame);
-    document.getElementById('pause-restart-btn').addEventListener('click', startGame);
+        const tx=rand(1,COLS-2);
+        const ty=rand(1,ROWS-2);
 
-    uiBest.textContent = bestScore.toLocaleString();
+        if(map[ty][tx]!==0) continue;
 
-    // ----------------------------
-    // Helpers
-    // ----------------------------
-    function clamp(value, min, max) {
-      return Math.max(min, Math.min(max, value));
-    }
+        const distStart=
+            Math.abs(tx-1)+
+            Math.abs(ty-1);
 
-    function randInt(min, max) {
-      return Math.floor(Math.random() * (max - min + 1)) + min;
-    }
+        const distExit=
+            Math.abs(tx-farthest.x)+
+            Math.abs(ty-farthest.y);
 
-    function shuffle(array) {
-      for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-      }
-      return array;
-    }
+        if(distStart>8 && distExit>6){
 
-    function tileKey(x, y) {
-      return `${x},${y}`;
-    }
-
-    function tileCenter(tileX, tileY, entity) {
-      return {
-        x: tileX * TILE_SIZE + (TILE_SIZE - entity.width) / 2,
-        y: tileY * TILE_SIZE + (TILE_SIZE - entity.height) / 2
-      };
-    }
-
-    function entityTile(entity) {
-      return {
-        x: Math.floor((entity.x + entity.width / 2) / TILE_SIZE),
-        y: Math.floor((entity.y + entity.height / 2) / TILE_SIZE)
-      };
-    }
-
-    function isInside(x, y) {
-      return x >= 0 && x < COLS && y >= 0 && y < ROWS;
-    }
-
-    function roundRectPath(x, y, w, h, r = 6) {
-      const radius = Math.min(r, w / 2, h / 2);
-      ctx.beginPath();
-      ctx.moveTo(x + radius, y);
-      ctx.arcTo(x + w, y, x + w, y + h, radius);
-      ctx.arcTo(x + w, y + h, x, y + h, radius);
-      ctx.arcTo(x, y + h, x, y, radius);
-      ctx.arcTo(x, y, x + w, y, radius);
-      ctx.closePath();
-    }
-
-    function drawSprite(img, x, y, w, h, fallbackColor, fallbackLabel) {
-      if (img.complete && img.naturalHeight !== 0) {
-        ctx.save();
-        roundRectPath(x, y, w, h, 6);
-        ctx.clip();
-        ctx.drawImage(img, x, y, w, h);
-        ctx.restore();
-      } else {
-        ctx.save();
-        roundRectPath(x, y, w, h, 6);
-        ctx.fillStyle = fallbackColor;
-        ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,0.9)';
-        ctx.font = `700 ${Math.floor(h * 0.34)}px system-ui, sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(fallbackLabel, x + w / 2, y + h / 2);
-        ctx.restore();
-      }
-    }
-
-    function rectsOverlap(a, b) {
-      return a.x < b.x + b.width &&
-             a.x + a.width > b.x &&
-             a.y < b.y + b.height &&
-             a.y + a.height > b.y;
-    }
-
-    function wallCollision(rect) {
-      const padding = 2;
-      const left = Math.floor((rect.x + padding) / TILE_SIZE);
-      const right = Math.floor((rect.x + rect.width - padding) / TILE_SIZE);
-      const top = Math.floor((rect.y + padding) / TILE_SIZE);
-      const bottom = Math.floor((rect.y + rect.height - padding) / TILE_SIZE);
-
-      for (let y = top; y <= bottom; y++) {
-        for (let x = left; x <= right; x++) {
-          if (!isInside(x, y) || currentMap[y][x] === 1) {
-            return true;
-          }
+            rx=tx;
+            ry=ty;
+            break;
         }
-      }
-      return false;
     }
 
-    function moveEntityWithCollision(entity, dx, dy) {
-      entity.x += dx;
-      if (wallCollision(entity)) entity.x -= dx;
+    map[1][1]=3;
+    map[farthest.y][farthest.x]=2;
+    map[ry][rx]=4;
 
-      entity.y += dy;
-      if (wallCollision(entity)) entity.y -= dy;
-
-      entity.x = clamp(entity.x, 0, canvas.width - entity.width);
-      entity.y = clamp(entity.y, 0, canvas.height - entity.height);
-    }
-
-    function getOpenCellTiles(grid) {
-      const tiles = [];
-      for (let y = 1; y < ROWS - 1; y += 2) {
-        for (let x = 1; x < COLS - 1; x += 2) {
-          if (grid[y][x] !== 1) tiles.push({ x, y });
+    return {
+        map,
+        start,
+        exit:{
+            x:farthest.x,
+            y:farthest.y
+        },
+        robin:{
+            x:rx,
+            y:ry
         }
-      }
-      return tiles;
-    }
+    };
+}
 
-    function bfsDistances(start, grid) {
-      const dist = Array.from({ length: ROWS }, () => Array(COLS).fill(-1));
-      const queue = [{ x: start.x, y: start.y }];
-      let head = 0;
-      dist[start.y][start.x] = 0;
+// ========================================
+// Pathfinding
+// ========================================
+function getPath(start,end){
 
-      while (head < queue.length) {
-        const cur = queue[head++];
-        const currentDist = dist[cur.y][cur.x];
+    const q=[start];
 
-        const neighbors = [
-          { x: cur.x + 1, y: cur.y },
-          { x: cur.x - 1, y: cur.y },
-          { x: cur.x, y: cur.y + 1 },
-          { x: cur.x, y: cur.y - 1 }
+    const came={};
+
+    const visited=
+        new Set([
+            tileKey(start.x,start.y)
+        ]);
+
+    while(q.length){
+
+        const cur=q.shift();
+
+        if(
+            cur.x===end.x &&
+            cur.y===end.y
+        ){
+
+            const path=[];
+
+            let k=
+                tileKey(end.x,end.y);
+
+            while(k){
+
+                const [x,y]=
+                    k.split(",")
+                    .map(Number);
+
+                path.push({x,y});
+
+                k=came[k];
+            }
+
+            return path.reverse();
+        }
+
+        const dirs=[
+            [1,0],[-1,0],
+            [0,1],[0,-1]
         ];
 
-        for (const n of neighbors) {
-          if (!isInside(n.x, n.y)) continue;
-          if (grid[n.y][n.x] === 1) continue;
-          if (dist[n.y][n.x] !== -1) continue;
-          dist[n.y][n.x] = currentDist + 1;
-          queue.push(n);
+        for(const d of dirs){
+
+            const nx=cur.x+d[0];
+            const ny=cur.y+d[1];
+
+            if(!inside(nx,ny)) continue;
+            if(currentMap[ny][nx]===1) continue;
+
+            const key=tileKey(nx,ny);
+
+            if(visited.has(key)) continue;
+
+            visited.add(key);
+
+            came[key]=tileKey(cur.x,cur.y);
+
+            q.push({x:nx,y:ny});
         }
-      }
-
-      return dist;
     }
 
-    function bfsPath(start, goal, grid) {
-      const startKey = tileKey(start.x, start.y);
-      const goalKey = tileKey(goal.x, goal.y);
-      const cameFrom = new Map();
-      const queue = [{ x: start.x, y: start.y }];
-      let head = 0;
+    return [];
+}
 
-      cameFrom.set(startKey, null);
+// ========================================
+// Start Game
+// ========================================
+function startGame(){
 
-      while (head < queue.length) {
-        const cur = queue[head++];
-        if (cur.x === goal.x && cur.y === goal.y) break;
+    level=1;
+    score=0;
 
-        const neighbors = [
-          { x: cur.x + 1, y: cur.y },
-          { x: cur.x - 1, y: cur.y },
-          { x: cur.x, y: cur.y + 1 },
-          { x: cur.x, y: cur.y - 1 }
-        ];
+    uiMainMenu.classList.add("hidden");
+    uiGameOver.classList.add("hidden");
 
-        for (const n of neighbors) {
-          if (!isInside(n.x, n.y)) continue;
-          if (grid[n.y][n.x] === 1) continue;
+    uiHud.classList.remove("hidden");
 
-          const key = tileKey(n.x, n.y);
-          if (cameFrom.has(key)) continue;
+    loadLevel();
 
-          cameFrom.set(key, tileKey(cur.x, cur.y));
-          queue.push(n);
-        }
-      }
+    gameState="PLAYING";
 
-      if (!cameFrom.has(goalKey)) return [];
+    lastTime=performance.now();
 
-      const path = [];
-      let curKey = goalKey;
-      while (curKey !== null) {
-        const [x, y] = curKey.split(',').map(Number);
-        path.push({ x, y });
-        curKey = cameFrom.get(curKey);
-      }
-      path.reverse();
-      return path;
-    }
-
-    function chooseBestEnemyCell(cells, distFromStart, distFromExit, exitTile) {
-      const sorted = [...cells].sort((a, b) => distFromStart[b.y][b.x] - distFromStart[a.y][a.x]);
-
-      for (const t of sorted) {
-        if (t.x === exitTile.x && t.y === exitTile.y) continue;
-        if (distFromStart[t.y][t.x] < 8) continue;
-        if (distFromExit[t.y][t.x] >= 6) return t;
-      }
-
-      for (const t of sorted) {
-        if (t.x !== exitTile.x || t.y !== exitTile.y) return t;
-      }
-      return { x: 1, y: 1 };
-    }
-
-    function addExtraLoops(grid, count) {
-      let safety = count * 20 + 20;
-      while (count > 0 && safety-- > 0) {
-        const x = randInt(2, COLS - 3);
-        const y = randInt(2, ROWS - 3);
-
-        if (grid[y][x] !== 1) continue;
-
-        const horizontalWall = x % 2 === 0 && y % 2 === 1;
-        const verticalWall = x % 2 === 1 && y % 2 === 0;
-
-        if (horizontalWall && grid[y][x - 1] !== 1 && grid[y][x + 1] !== 1) {
-          grid[y][x] = 0;
-          count--;
-        } else if (verticalWall && grid[y - 1][x] !== 1 && grid[y + 1][x] !== 1) {
-          grid[y][x] = 0;
-          count--;
-        }
-      }
-    }
-
-    function generateLevel(level) {
-      const grid = Array.from({ length: ROWS }, () => Array(COLS).fill(1));
-      const visited = Array.from({ length: CELL_ROWS }, () => Array(CELL_COLS).fill(false));
-      const stack = [];
-
-      const startCell = { x: 0, y: 0 };
-      visited[startCell.y][startCell.x] = true;
-      grid[1][1] = 0;
-      stack.push(startCell);
-
-      while (stack.length) {
-        const cur = stack[stack.length - 1];
-        const options = [];
-
-        const neighborCells = [
-          { x: cur.x + 1, y: cur.y },
-          { x: cur.x - 1, y: cur.y },
-          { x: cur.x, y: cur.y + 1 },
-          { x: cur.x, y: cur.y - 1 }
-        ];
-
-        for (const n of neighborCells) {
-          if (n.x < 0 || n.x >= CELL_COLS || n.y < 0 || n.y >= CELL_ROWS) continue;
-          if (!visited[n.y][n.x]) options.push(n);
-        }
-
-        if (!options.length) {
-          stack.pop();
-          continue;
-        }
-
-        const next = options[randInt(0, options.length - 1)];
-        visited[next.y][next.x] = true;
-
-        const x1 = cur.x * 2 + 1;
-        const y1 = cur.y * 2 + 1;
-        const x2 = next.x * 2 + 1;
-        const y2 = next.y * 2 + 1;
-
-        grid[y2][x2] = 0;
-        grid[(y1 + y2) / 2][(x1 + x2) / 2] = 0;
-        stack.push(next);
-      }
-
-      addExtraLoops(grid, clamp(Math.floor(level / 4), 0, 8));
-
-      const startTile = { x: 1, y: 1 };
-      const distFromStart = bfsDistances(startTile, grid);
-      const openCells = getOpenCellTiles(grid);
-
-      const exit = openCells.reduce((best, t) => {
-        const d = distFromStart[t.y][t.x];
-        if (d > best.d) return { x: t.x, y: t.y, d };
-        return best;
-      }, { x: startTile.x, y: startTile.y, d: -1 });
-
-      const distFromExit = bfsDistances(exit, grid);
-      const enemy = chooseBestEnemyCell(openCells, distFromStart, distFromExit, exit);
-
-      grid[startTile.y][startTile.x] = 3;
-      grid[exit.y][exit.x] = 2;
-      grid[enemy.y][enemy.x] = 4;
-
-      return { grid, startTile, exitTile: exit, enemyTile: enemy };
-    }
-
-    function saveBestScore() {
-      bestScore = Math.max(bestScore, Math.floor(score));
-      localStorage.setItem(STORAGE_KEY, String(bestScore));
-      uiBest.textContent = bestScore.toLocaleString();
-    }
-
-    function resetEntitiesForLevel(level) {
-      const generated = generateLevel(level);
-      currentMap = generated.grid;
-      exitTile = generated.exitTile;
-
-      const playerStart = tileCenter(generated.startTile.x, generated.startTile.y, player);
-      const enemyStart = tileCenter(generated.enemyTile.x, generated.enemyTile.y, robin);
-
-      player.x = playerStart.x;
-      player.y = playerStart.y;
-
-      robin.x = enemyStart.x;
-      robin.y = enemyStart.y;
-      robin.path = [];
-      robin.pathIndex = 1;
-      robin.repathTimer = 0;
-      robin.lastPlayerKey = '';
-
-      survivalTime = 0;
-      uiLevel.textContent = String(level);
-      uiAngerBar.style.width = '0%';
-
-      // Enemy speed stays below the player's speed so every level remains beatable.
-      robin.speed = clamp(115 + level * 2.7, 115, player.speed - 35);
-      robin.maxSpeed = player.speed - 35;
-    }
-
-    // ----------------------------
-    // Game flow
-    // ----------------------------
-    function showOnly(layer) {
-      [uiMainMenu, uiPauseMenu, uiGameOver, uiTransition].forEach(el => el.classList.add('hidden'));
-      if (layer) layer.classList.remove('hidden');
-    }
-
-    function startGame() {
-      score = 0;
-      levelNumber = 1;
-      state = 'playing';
-      showOnly(null);
-      uiHud.classList.remove('hidden');
-      resetEntitiesForLevel(levelNumber);
-      lastFrameTime = performance.now();
-      uiScore.textContent = '0';
-      uiBest.textContent = bestScore.toLocaleString();
-    }
-
-    function pauseGame() {
-      if (state !== 'playing') return;
-      state = 'paused';
-      showOnly(uiPauseMenu);
-      uiHud.classList.remove('hidden');
-    }
-
-    function resumeGame() {
-      if (state !== 'paused') return;
-      state = 'playing';
-      showOnly(null);
-      uiHud.classList.remove('hidden');
-      lastFrameTime = performance.now();
-    }
-
-    function levelComplete() {
-      if (state !== 'playing') return;
-
-      score += 600 + levelNumber * 120 + Math.floor(survivalTime * 35);
-      saveBestScore();
-
-      levelNumber += 1;
-      uiTransitionLevel.textContent = String(levelNumber);
-      state = 'transition';
-      showOnly(uiTransition);
-      uiHud.classList.remove('hidden');
-      transitionEndsAt = performance.now() + 1100;
-    }
-
-    function gameOver() {
-      if (state === 'gameover') return;
-      state = 'gameover';
-      uiFinalScore.textContent = Math.floor(score).toLocaleString();
-      saveBestScore();
-      showOnly(uiGameOver);
-      uiHud.classList.add('hidden');
-    }
-
-    // ----------------------------
-    // Update
-    // ----------------------------
-    function update(dt, now) {
-      survivalTime += dt;
-      score += dt * (14 + levelNumber * 0.9);
-      uiScore.textContent = Math.floor(score).toLocaleString();
-
-      // Player movement with diagonal normalization
-      let moveX = 0;
-      let moveY = 0;
-
-      if (keys.a || keys.ArrowLeft) moveX -= 1;
-      if (keys.d || keys.ArrowRight) moveX += 1;
-      if (keys.w || keys.ArrowUp) moveY -= 1;
-      if (keys.s || keys.ArrowDown) moveY += 1;
-
-      if (moveX !== 0 || moveY !== 0) {
-        const len = Math.hypot(moveX, moveY);
-        moveX = moveX / len;
-        moveY = moveY / len;
-        moveEntityWithCollision(player, moveX * player.speed * dt, moveY * player.speed * dt);
-      }
-
-      // Exit check
-      const exitRect = {
-        x: exitTile.x * TILE_SIZE,
-        y: exitTile.y * TILE_SIZE,
-        width: TILE_SIZE,
-        height: TILE_SIZE
-      };
-
-      if (rectsOverlap(player, exitRect)) {
-        levelComplete();
-        return;
-      }
-
-      // Robin AI
-      const pTile = entityTile(player);
-      const rTile = entityTile(robin);
-      const playerKey = tileKey(pTile.x, pTile.y);
-
-      // Anger increases over time, but speed never exceeds player's speed.
-      robin.anger = clamp(survivalTime / (18 + levelNumber * 1.5), 0, 1);
-      const targetSpeed = clamp(115 + levelNumber * 2.7 + survivalTime * 0.65, 115, robin.maxSpeed);
-      robin.speed = targetSpeed;
-      uiAngerBar.style.width = `${Math.round(robin.anger * 100)}%`;
-
-      robin.repathTimer -= dt;
-      if (robin.repathTimer <= 0 || robin.lastPlayerKey !== playerKey || robin.path.length === 0) {
-        robin.path = bfsPath(rTile, pTile, currentMap);
-        robin.pathIndex = 1;
-        robin.repathTimer = clamp(0.22 - levelNumber * 0.002, 0.08, 0.22);
-        robin.lastPlayerKey = playerKey;
-      }
-
-      const targetNode = robin.path[robin.pathIndex];
-      if (targetNode) {
-        const targetX = targetNode.x * TILE_SIZE + (TILE_SIZE - robin.width) / 2;
-        const targetY = targetNode.y * TILE_SIZE + (TILE_SIZE - robin.height) / 2;
-        const dx = targetX - robin.x;
-        const dy = targetY - robin.y;
-        const dist = Math.hypot(dx, dy);
-
-        if (dist < 1.5) {
-          robin.x = targetX;
-          robin.y = targetY;
-          robin.pathIndex++;
-        } else {
-          robin.x += (dx / dist) * robin.speed * dt;
-          robin.y += (dy / dist) * robin.speed * dt;
-        }
-      } else {
-        // Backup chase if the path is empty for any reason.
-        const dx = player.x - robin.x;
-        const dy = player.y - robin.y;
-        const dist = Math.hypot(dx, dy) || 1;
-        robin.x += (dx / dist) * robin.speed * dt;
-        robin.y += (dy / dist) * robin.speed * dt;
-      }
-
-      // Collision with Robin
-      const hitPad = 8;
-      const pBox = {
-        x: player.x + hitPad,
-        y: player.y + hitPad,
-        width: player.width - hitPad * 2,
-        height: player.height - hitPad * 2
-      };
-      const rBox = {
-        x: robin.x + hitPad,
-        y: robin.y + hitPad,
-        width: robin.width - hitPad * 2,
-        height: robin.height - hitPad * 2
-      };
-
-      if (rectsOverlap(pBox, rBox)) {
-        gameOver();
-      }
-
-      if (score > bestScore) {
-        bestScore = Math.floor(score);
-        uiBest.textContent = bestScore.toLocaleString();
-      }
-    }
-
-    // ----------------------------
-    // Draw
-    // ----------------------------
-    function drawBackground(now) {
-      const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
-      g.addColorStop(0, '#06101d');
-      g.addColorStop(1, '#091427');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // subtle stars / particles
-      ctx.save();
-      ctx.globalAlpha = 0.22;
-      for (let i = 0; i < 26; i++) {
-        const x = (i * 97 + (now * 0.02)) % canvas.width;
-        const y = (i * 53 + (now * 0.01)) % canvas.height;
-        ctx.fillStyle = i % 3 === 0 ? '#38bdf8' : '#94a3b8';
-        ctx.fillRect(x, y, 2, 2);
-      }
-      ctx.restore();
-    }
-
-    function drawMap(now) {
-      for (let y = 0; y < ROWS; y++) {
-        for (let x = 0; x < COLS; x++) {
-          const tile = currentMap[y]?.[x];
-
-          if (tile === 1) {
-            ctx.fillStyle = '#1f2a3d';
-            ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            ctx.strokeStyle = '#334155';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(x * TILE_SIZE + 0.5, y * TILE_SIZE + 0.5, TILE_SIZE - 1, TILE_SIZE - 1);
-          } else {
-            // floor
-            ctx.fillStyle = '#0b1220';
-            ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-          }
-        }
-      }
-
-      // Exit
-      const ex = exitTile.x * TILE_SIZE;
-      const ey = exitTile.y * TILE_SIZE;
-      const pulse = 6 + Math.sin(now / 180) * 4;
-
-      ctx.save();
-      ctx.shadowBlur = 24;
-      ctx.shadowColor = 'rgba(16,185,129,0.8)';
-      ctx.fillStyle = 'rgba(16,185,129,0.20)';
-      ctx.fillRect(ex, ey, TILE_SIZE, TILE_SIZE);
-      ctx.strokeStyle = '#10b981';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(ex + 4, ey + 4, TILE_SIZE - 8, TILE_SIZE - 8);
-      ctx.fillStyle = '#10b981';
-      ctx.fillRect(ex + 20 - pulse / 2, ey + 20 - pulse / 2, pulse, pulse);
-      ctx.restore();
-    }
-
-    function drawEntities(now) {
-      const playerImg = assets[selectedCharacter];
-
-      // Player glow
-      ctx.save();
-      ctx.shadowBlur = 14;
-      ctx.shadowColor = 'rgba(56,189,248,0.7)';
-      drawSprite(playerImg, player.x, player.y, player.width, player.height, '#38bdf8', selectedCharacter[0].toUpperCase());
-      ctx.restore();
-
-      // Robin glow scales with anger
-      ctx.save();
-      ctx.shadowBlur = 10 + robin.anger * 20;
-      ctx.shadowColor = 'rgba(239,68,68,0.85)';
-      drawSprite(assets.robin, robin.x, robin.y, robin.width, robin.height, '#ef4444', 'R');
-      ctx.restore();
-    }
-
-    function drawOverlayTint() {
-      // vignetting / mood
-      const grad = ctx.createRadialGradient(
-        canvas.width / 2, canvas.height / 2, 100,
-        canvas.width / 2, canvas.height / 2, canvas.width * 0.75
-      );
-      grad.addColorStop(0, 'rgba(0,0,0,0)');
-      grad.addColorStop(1, 'rgba(0,0,0,0.22)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
-
-    function draw(now) {
-      drawBackground(now);
-      drawMap(now);
-      drawEntities(now);
-      drawOverlayTint();
-
-      // Small in-game hint in the corner
-      ctx.save();
-      ctx.fillStyle = 'rgba(15,23,42,0.68)';
-      ctx.strokeStyle = 'rgba(148,163,184,0.16)';
-      ctx.lineWidth = 1;
-      roundRectPath(12, canvas.height - 38, 220, 24, 10);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = '#cbd5e1';
-      ctx.font = '600 12px system-ui, sans-serif';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('WASD / Arrows • P to pause', 22, canvas.height - 26);
-      ctx.restore();
-    }
-
-    // ----------------------------
-    // Main loop
-    // ----------------------------
-    function loop(now) {
-      if (!lastFrameTime) lastFrameTime = now;
-      let dt = (now - lastFrameTime) / 1000;
-      lastFrameTime = now;
-
-      // Keep deltas sane
-      dt = Math.min(dt, 0.05);
-
-      if (state === 'playing') {
-        update(dt, now);
-      } else if (state === 'transition') {
-        if (now >= transitionEndsAt) {
-          resetEntitiesForLevel(levelNumber);
-          state = 'playing';
-          showOnly(null);
-          uiHud.classList.remove('hidden');
-          lastFrameTime = now;
-        }
-      }
-
-      draw(now);
-      requestAnimationFrame(loop);
-    }
-
-    // ----------------------------
-    // Boot
-    // ----------------------------
-    showOnly(uiMainMenu);
-    uiHud.classList.add('hidden');
-    ctx.fillStyle = '#07101d';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
     requestAnimationFrame(loop);
-  </script>
+}
+
+// ========================================
+// Load Level
+// ========================================
+function loadLevel(){
+
+    const generated=
+        generateLevel();
+
+    currentMap=generated.map;
+
+    exitTile=generated.exit;
+
+    const pPos=
+        tileCenter(
+            generated.start.x,
+            generated.start.y,
+            player
+        );
+
+    player.x=pPos.x;
+    player.y=pPos.y;
+
+    const rPos=
+        tileCenter(
+            generated.robin.x,
+            generated.robin.y,
+            robin
+        );
+
+    robin.x=rPos.x;
+    robin.y=rPos.y;
+
+    robin.path=[];
+
+    robin.speed=Math.min(
+        130+level*2,
+        player.speed-45
+    );
+
+    survivalTime=0;
+
+    uiLevel.innerText=level;
+
+    uiAngerBar.style.width="0%";
+}
+
+// ========================================
+// Level Complete
+// ========================================
+function nextLevel(){
+
+    gameState="TRANSITION";
+
+    level++;
+
+    score+=1000;
+
+    document.getElementById(
+        "transition-level"
+    ).innerText=level;
+
+    uiTransition.classList.remove("hidden");
+
+    setTimeout(()=>{
+
+        uiTransition.classList.add("hidden");
+
+        loadLevel();
+
+        gameState="PLAYING";
+
+        lastTime=performance.now();
+
+        requestAnimationFrame(loop);
+
+    },1000);
+}
+
+// ========================================
+// Game Over
+// ========================================
+function gameOver(){
+
+    gameState="GAMEOVER";
+
+    uiHud.classList.add("hidden");
+
+    uiFinalScore.innerText=
+        Math.floor(score);
+
+    uiGameOver.classList.remove("hidden");
+}
+
+// ========================================
+// Update
+// ========================================
+function update(dt){
+
+    survivalTime+=dt;
+
+    score+=dt*12;
+
+    uiScore.innerText=
+        Math.floor(score);
+
+    // ----------------------------
+    // Hide mechanic
+    // ----------------------------
+    const hiding=keys.Shift;
+
+    let dx=0;
+    let dy=0;
+
+    if(!hiding){
+
+        if(keys.w||keys.ArrowUp) dy--;
+        if(keys.s||keys.ArrowDown) dy++;
+        if(keys.a||keys.ArrowLeft) dx--;
+        if(keys.d||keys.ArrowRight) dx++;
+
+        if(dx!==0 || dy!==0){
+
+            const len=Math.hypot(dx,dy);
+
+            dx/=len;
+            dy/=len;
+
+            move(
+                player,
+                dx*player.speed*dt,
+                dy*player.speed*dt
+            );
+        }
+
+        player.hidden=false;
+        player.hideTimer=0;
+
+    } else {
+
+        player.hideTimer+=dt;
+
+        if(player.hideTimer>1){
+
+            player.hidden=true;
+        }
+    }
+
+    // ----------------------------
+    // Robin
+    // ----------------------------
+    robin.anger=
+        Math.min(
+            1,
+            survivalTime/35
+        );
+
+    uiAngerBar.style.width=
+        `${robin.anger*100}%`;
+
+    const pTile=
+        entityTile(player);
+
+    const rTile=
+        entityTile(robin);
+
+    if(player.hidden){
+
+        robin.wandering=true;
+
+    } else {
+
+        robin.wandering=false;
+    }
+
+    // Wander mode
+    if(robin.wandering){
+
+        robin.wanderTimer-=dt;
+
+        if(robin.wanderTimer<=0){
+
+            robin.wanderTimer=
+                rand(1,3);
+
+            const dirs=[
+                {x:1,y:0},
+                {x:-1,y:0},
+                {x:0,y:1},
+                {x:0,y:-1}
+            ];
+
+            robin.wanderDir=
+                dirs[rand(0,3)];
+        }
+
+        move(
+            robin,
+            robin.wanderDir.x*
+            robin.speed*
+            0.45*
+            dt,
+
+            robin.wanderDir.y*
+            robin.speed*
+            0.45*
+            dt
+        );
+
+    } else {
+
+        robin.repath-=dt;
+
+        if(robin.repath<=0){
+
+            robin.repath=.2;
+
+            robin.path=
+                getPath(
+                    rTile,
+                    pTile
+                );
+
+            robin.pathIndex=1;
+        }
+
+        const target=
+            robin.path[
+                robin.pathIndex
+            ];
+
+        if(target){
+
+            const tx=
+                target.x*TILE+
+                (TILE-robin.width)/2;
+
+            const ty=
+                target.y*TILE+
+                (TILE-robin.height)/2;
+
+            const vx=tx-robin.x;
+            const vy=ty-robin.y;
+
+            const dist=
+                Math.hypot(vx,vy);
+
+            if(dist<2){
+
+                robin.pathIndex++;
+
+            } else {
+
+                robin.x+=
+                    (vx/dist)*
+                    robin.speed*
+                    dt;
+
+                robin.y+=
+                    (vy/dist)*
+                    robin.speed*
+                    dt;
+            }
+        }
+    }
+
+    // Exit
+    const exitRect={
+        x:exitTile.x*TILE,
+        y:exitTile.y*TILE,
+        width:TILE,
+        height:TILE
+    };
+
+    if(overlap(player,exitRect)){
+
+        nextLevel();
+        return;
+    }
+
+    // Robin collision
+    if(
+        overlap(player,robin) &&
+        !player.hidden
+    ){
+        gameOver();
+    }
+}
+
+// ========================================
+// Draw Character
+// ========================================
+function drawCharacter(
+    img,
+    x,y,w,h,
+    fallback
+){
+
+    if(
+        img.complete &&
+        img.naturalWidth>0
+    ){
+
+        ctx.drawImage(
+            img,
+            x,y,w,h
+        );
+
+    } else {
+
+        ctx.fillStyle=fallback;
+
+        ctx.fillRect(x,y,w,h);
+    }
+}
+
+// ========================================
+// Draw
+// ========================================
+function draw(){
+
+    ctx.fillStyle="#08111f";
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+    // Map
+    for(let y=0;y<ROWS;y++){
+
+        for(let x=0;x<COLS;x++){
+
+            if(currentMap[y][x]===1){
+
+                ctx.fillStyle="#1f2a3d";
+
+                ctx.fillRect(
+                    x*TILE,
+                    y*TILE,
+                    TILE,
+                    TILE
+                );
+
+                ctx.strokeStyle="#334155";
+
+                ctx.strokeRect(
+                    x*TILE,
+                    y*TILE,
+                    TILE,
+                    TILE
+                );
+            }
+        }
+    }
+
+    // Exit
+    const ex=exitTile.x*TILE;
+    const ey=exitTile.y*TILE;
+
+    ctx.fillStyle=
+        "rgba(16,185,129,.25)";
+
+    ctx.fillRect(
+        ex,
+        ey,
+        TILE,
+        TILE
+    );
+
+    ctx.strokeStyle="#10b981";
+    ctx.lineWidth=3;
+
+    ctx.strokeRect(
+        ex+4,
+        ey+4,
+        TILE-8,
+        TILE-8
+    );
+
+    // Exit pulse
+    const pulse=
+        8+
+        Math.sin(Date.now()/140)*4;
+
+    ctx.beginPath();
+
+    ctx.fillStyle="#10b981";
+
+    ctx.arc(
+        ex+20,
+        ey+20,
+        pulse,
+        0,
+        Math.PI*2
+    );
+
+    ctx.fill();
+
+    // Player
+    ctx.save();
+
+    if(player.hidden){
+        ctx.globalAlpha=.35;
+    }
+
+    drawCharacter(
+        assets[selectedCharacter],
+        player.x,
+        player.y,
+        player.width,
+        player.height,
+        "#38bdf8"
+    );
+
+    ctx.restore();
+
+    // Robin
+    ctx.save();
+
+    ctx.shadowBlur=
+        10+
+        robin.anger*18;
+
+    ctx.shadowColor="red";
+
+    drawCharacter(
+        assets.robin,
+        robin.x,
+        robin.y,
+        robin.width,
+        robin.height,
+        "#ef4444"
+    );
+
+    ctx.restore();
+}
+
+// ========================================
+// Main Loop
+// ========================================
+function loop(timestamp){
+
+    if(gameState!=="PLAYING"){
+        return;
+    }
+
+    let dt=
+        (timestamp-lastTime)/1000;
+
+    if(dt>0.1) dt=0.1;
+
+    lastTime=timestamp;
+
+    update(dt);
+
+    draw();
+
+    if(gameState==="PLAYING"){
+
+        requestAnimationFrame(loop);
+    }
+}
+
+// ========================================
+// Initial Draw
+// ========================================
+ctx.fillStyle="#08111f";
+
+ctx.fillRect(
+    0,
+    0,
+    canvas.width,
+    canvas.height
+);
+</script>
+
 </body>
 </html>
