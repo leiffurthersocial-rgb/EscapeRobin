@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escape Robin</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: rgba(30, 41, 59, 0.85);
+            --text-main: #f8fafc;
+            --accent: #38bdf8;
+            --accent-hover: #0ea5e9;
+            --danger: #ef4444;
+            --success: #10b981;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #game-container {
+            position: relative;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            background-color: #000;
+        }
+
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: var(--panel-bg);
+            backdrop-filter: blur(5px);
+            z-index: 10;
+            transition: opacity 0.3s ease;
+        }
+
+        .hidden {
+            display: none !important;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px var(--accent);
+        }
+        
+        h1 span.robin {
+            color: var(--danger);
+            text-shadow: 0 0 10px var(--danger);
+        }
+
+        .character-select {
+            display: flex;
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .char-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid transparent;
+            border-radius: 8px;
+            padding: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+
+        .char-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .char-card.selected {
+            border-color: var(--accent);
+            box-shadow: 0 0 15px var(--accent);
+        }
+
+        .char-card img {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        button {
+            padding: 12px 30px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: white;
+            background: var(--accent);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        button:hover {
+            background: var(--accent-hover);
+        }
+
+        #hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 15px 20px;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: space-between;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+            z-index: 5;
+            font-size: 1.2rem;
+            font-weight: bold;
+            pointer-events: none;
+        }
+
+        .hud-stat {
+            text-shadow: 1px 1px 2px black;
+        }
+
+        #anger-bar-container {
+            width: 200px;
+            height: 10px;
+            background: #333;
+            border-radius: 5px;
+            margin-top: 5px;
+            overflow: hidden;
+        }
+
+        #anger-bar {
+            height: 100%;
+            width: 0%;
+            background: var(--danger);
+            transition: width 0.2s linear;
+        }
+
+        .instructions {
+            margin-top: 20px;
+            font-size: 0.9rem;
+            color: #94a3b8;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="hud" class="hidden">
+        <div class="hud-stat">Score: <span id="ui-score">0</span></div>
+        <div class="hud-stat">Level: <span id="ui-level">1</span></div>
+        <div class="hud-stat" style="text-align: right;">
+            Robin's Anger
+            <div id="anger-bar-container"><div id="anger-bar"></div></div>
+        </div>
+    </div>
+
+    <div id="main-menu" class="ui-layer">
+        <h1>Escape <span class="robin">Robin</span></h1>
+        <p>Select your character:</p>
+        <div class="character-select">
+            <div class="char-card selected" data-char="leif">
+                <img src="leif.jpeg" alt="Leif" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'80\' height=\'80\'%3E%3Crect width=\'80\' height=\'80\' fill=\'%233b82f6\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'white\'%3ELeif%3C/text%3E%3C/svg%3E'">
+                <div>Leif</div>
+            </div>
+            <div class="char-card" data-char="lennard">
+                <img src="lennard.jpeg" alt="Lennard" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'80\' height=\'80\'%3E%3Crect width=\'80\' height=\'80\' fill=\'%238b5cf6\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'white\'%3ELennard%3C/text%3E%3C/svg%3E'">
+                <div>Lennard</div>
+            </div>
+            <div class="char-card" data-char="erim">
+                <img src="erim.jpeg" alt="Erim" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'80\' height=\'80\'%3E%3Crect width=\'80\' height=\'80\' fill=\'%2310b981\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'white\'%3EErim%3C/text%3E%3C/svg%3E'">
+                <div>Erim</div>
+            </div>
+        </div>
+        <button id="start-btn">Start Game</button>
+        <div class="instructions">
+            Use WASD or Arrow Keys to move.<br>Find the green exit. The longer you stay, the faster Robin gets!<br>Points are awarded for survival time and clearing levels.
+        </div>
+    </div>
+
+    <div id="game-over-menu" class="ui-layer hidden">
+        <h1>Game <span class="robin">Over</span></h1>
+        <h2 style="margin: 0;">Robin caught you.</h2>
+        <p style="font-size: 1.5rem;">Final Score: <span id="final-score" style="color: var(--accent); font-weight: bold;">0</span></p>
+        <button id="restart-btn" style="margin-top: 20px;">Play Again</button>
+    </div>
+
+    <div id="level-transition" class="ui-layer hidden">
+        <h1>Level <span id="transition-level">2</span></h1>
+        <p>Robin is adapting...</p>
+    </div>
+
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+</div>
+
+<script>
+    // --- Asset Management ---
+    const assets = {
+        robin: new Image(),
+        leif: new Image(),
+        lennard: new Image(),
+        erim: new Image()
+    };
+    assets.robin.src = 'robin.jpeg';
+    assets.leif.src = 'leif.jpeg';
+    assets.lennard.src = 'lennard.jpeg';
+    assets.erim.src = 'erim.jpeg';
+
+    let selectedCharacter = 'leif';
+
+    // --- Game Configuration & State ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const TILE_SIZE = 40;
+    const COLS = canvas.width / TILE_SIZE;
+    const ROWS = canvas.height / TILE_SIZE;
+
+    let gameState = 'MENU'; // MENU, PLAYING, TRANSITION, GAMEOVER
+    let score = 0;
+    let currentLevelIdx = 0;
+    let survivalTimer = 0;
+    let lastTime = 0;
+
+    // --- UI Elements ---
+    const uiMainMenu = document.getElementById('main-menu');
+    const uiGameOver = document.getElementById('game-over-menu');
+    const uiTransition = document.getElementById('level-transition');
+    const uiHud = document.getElementById('hud');
+    const uiScore = document.getElementById('ui-score');
+    const uiLevel = document.getElementById('ui-level');
+    const uiAngerBar = document.getElementById('anger-bar');
+    const uiFinalScore = document.getElementById('final-score');
+
+    // --- Maps (0 = path, 1 = wall, 2 = exit, 3 = player start, 4 = robin start) ---
+    const levels = [
+        // Level 1: Simple
+        [
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,3,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,4,1],
+            [1,1,1,1,0,1,0,1,1,1,1,0,1,0,1,1,1,1,0,1],
+            [1,0,0,0,0,1,0,0,0,0,1,0,0,0,1,0,0,0,0,1],
+            [1,0,1,1,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,1],
+            [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,1],
+            [1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0,1,0,1,1],
+            [1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,1,0,0,1],
+            [1,0,1,1,1,0,1,1,1,1,1,0,1,0,1,1,1,1,0,1],
+            [1,0,1,0,0,0,0,0,0,0,1,0,1,0,1,0,0,1,0,1],
+            [1,0,1,0,1,1,1,1,1,0,1,0,1,0,1,0,1,1,0,1],
+            [1,0,1,0,1,2,0,0,1,0,0,0,0,0,1,0,0,0,0,1],
+            [1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ],
+        // Level 2: Complex
+        [
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,4,0,1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,2,1],
+            [1,1,0,1,0,1,1,1,0,1,0,1,0,1,0,1,1,1,1,1],
+            [1,0,0,0,0,1,0,0,0,1,0,1,0,0,0,1,0,0,0,1],
+            [1,0,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0,1,0,1],
+            [1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,1],
+            [1,1,1,1,1,0,1,1,0,1,1,1,1,1,1,1,1,1,0,1],
+            [1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1],
+            [1,0,1,0,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0,1],
+            [1,0,1,0,0,0,0,0,0,1,0,1,0,0,0,0,0,1,0,1],
+            [1,0,1,1,1,1,1,1,0,1,0,1,0,1,1,1,0,1,0,1],
+            [1,0,0,0,0,0,0,1,0,1,0,0,0,1,3,1,0,1,0,1],
+            [1,1,1,1,1,1,0,1,0,1,1,1,1,1,0,1,0,1,0,1],
+            [1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ],
+        // Level 3: Open Chaos
+        [
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,3,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,4,1],
+            [1,0,1,1,1,0,1,0,1,1,1,0,1,0,1,1,1,0,1,1],
+            [1,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,1],
+            [1,0,1,0,1,1,0,1,1,0,1,1,0,1,1,0,1,1,0,1],
+            [1,0,0,0,1,2,0,0,1,0,0,0,0,1,0,0,0,0,0,1],
+            [1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0,1],
+            [1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
+            [1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1],
+            [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+            [1,1,1,0,1,0,1,1,1,1,1,1,1,1,0,1,0,1,1,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ]
+    ];
+
+    let currentMap = [];
+
+    // --- Entities ---
+    const player = {
+        x: 0, y: 0, width: 30, height: 30, speed: 200, // pixels per sec
+        vx: 0, vy: 0, color: '#38bdf8'
+    };
+
+    const enemy = {
+        x: 0, y: 0, width: 30, height: 30, baseSpeed: 100, currentSpeed: 100, maxSpeed: 250,
+        path: [], color: '#ef4444', angerLevel: 0
+    };
+
+    let exitPos = {x: 0, y: 0};
+
+    // --- Input Handling ---
+    const keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowLeft: false, ArrowDown: false, ArrowRight: false };
+
+    window.addEventListener('keydown', (e) => { if(keys.hasOwnProperty(e.key)) keys[e.key] = true; });
+    window.addEventListener('keyup', (e) => { if(keys.hasOwnProperty(e.key)) keys[e.key] = false; });
+
+    // UI Character Select
+    document.querySelectorAll('.char-card').forEach(card => {
+        card.addEventListener('click', () => {
+            document.querySelectorAll('.char-card').forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
+            selectedCharacter = card.dataset.char;
+        });
+    });
+
+    document.getElementById('start-btn').addEventListener('click', startGame);
+    document.getElementById('restart-btn').addEventListener('click', startGame);
+
+    // --- Game Logic ---
+
+    function startGame() {
+        score = 0;
+        currentLevelIdx = 0;
+        uiMainMenu.classList.add('hidden');
+        uiGameOver.classList.add('hidden');
+        uiHud.classList.remove('hidden');
+        loadLevel(currentLevelIdx);
+        gameState = 'PLAYING';
+        lastTime = performance.now();
+        requestAnimationFrame(gameLoop);
+    }
+
+    function loadLevel(idx) {
+        // Deep copy map
+        currentMap = levels[idx % levels.length].map(row => [...row]);
+        survivalTimer = 0;
+        enemy.angerLevel = 0;
+        enemy.currentSpeed = enemy.baseSpeed + (idx * 20); // Faster base speed per level
+        
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                let val = currentMap[r][c];
+                if (val === 3) {
+                    player.x = c * TILE_SIZE + (TILE_SIZE - player.width) / 2;
+                    player.y = r * TILE_SIZE + (TILE_SIZE - player.height) / 2;
+                    currentMap[r][c] = 0;
+                } else if (val === 4) {
+                    enemy.x = c * TILE_SIZE + (TILE_SIZE - enemy.width) / 2;
+                    enemy.y = r * TILE_SIZE + (TILE_SIZE - enemy.height) / 2;
+                    currentMap[r][c] = 0;
+                } else if (val === 2) {
+                    exitPos = { x: c * TILE_SIZE, y: r * TILE_SIZE };
+                }
+            }
+        }
+        
+        uiLevel.innerText = idx + 1;
+        uiAngerBar.style.width = '0%';
+    }
+
+    function levelComplete() {
+        gameState = 'TRANSITION';
+        score += 1000 + Math.floor(survivalTimer * 50); // Big bonus + survival bonus
+        currentLevelIdx++;
+        
+        document.getElementById('transition-level').innerText = currentLevelIdx + 1;
+        uiTransition.classList.remove('hidden');
+        uiHud.classList.add('hidden');
+        
+        setTimeout(() => {
+            uiTransition.classList.add('hidden');
+            uiHud.classList.remove('hidden');
+            loadLevel(currentLevelIdx);
+            gameState = 'PLAYING';
+            lastTime = performance.now();
+            requestAnimationFrame(gameLoop);
+        }, 2000);
+    }
+
+    function gameOver() {
+        gameState = 'GAMEOVER';
+        uiGameOver.classList.remove('hidden');
+        uiHud.classList.add('hidden');
+        uiFinalScore.innerText = score;
+    }
+
+    // --- Collision Detection ---
+    function checkWallCollision(rect, map) {
+        let padding = 2; // slight tolerance
+        let left = Math.floor((rect.x + padding) / TILE_SIZE);
+        let right = Math.floor((rect.x + rect.width - padding) / TILE_SIZE);
+        let top = Math.floor((rect.y + padding) / TILE_SIZE);
+        let bottom = Math.floor((rect.y + rect.height - padding) / TILE_SIZE);
+
+        for (let r = top; r <= bottom; r++) {
+            for (let c = left; c <= right; c++) {
+                if (r >= 0 && r < ROWS && c >= 0 && c < COLS) {
+                    if (map[r][c] === 1) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    function checkRectOverlap(r1, r2) {
+        return r1.x < r2.x + r2.width &&
+               r1.x + r1.width > r2.x &&
+               r1.y < r2.y + r2.height &&
+               r1.y + r1.height > r2.y;
+    }
+
+    // --- A* Pathfinding for Robin ---
+    class Node {
+        constructor(x, y, parent = null) {
+            this.x = x; this.y = y; this.parent = parent;
+            this.g = 0; this.h = 0; this.f = 0;
+        }
+    }
+
+    function getPath(startX, startY, endX, endY) {
+        let openList = [];
+        let closedList = new Set();
+        let startNode = new Node(startX, startY);
+        let targetNode = new Node(endX, endY);
+        
+        openList.push(startNode);
+        
+        const getNeighbors = (node) => {
+            let neighbors = [];
+            const dirs = [[0,-1], [1,0], [0,1], [-1,0]];
+            for(let dir of dirs) {
+                let nx = node.x + dir[0];
+                let ny = node.y + dir[1];
+                if(nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS && currentMap[ny][nx] !== 1) {
+                    neighbors.push(new Node(nx, ny, node));
+                }
+            }
+            return neighbors;
+        };
+
+        let loops = 0;
+        while(openList.length > 0 && loops < 500) {
+            loops++;
+            // Get lowest f
+            let lowestIdx = 0;
+            for(let i=1; i<openList.length; i++) {
+                if(openList[i].f < openList[lowestIdx].f) lowestIdx = i;
+            }
+            
+            let current = openList.splice(lowestIdx, 1)[0];
+            closedList.add(`${current.x},${current.y}`);
+            
+            if(current.x === targetNode.x && current.y === targetNode.y) {
+                let path = [];
+                let curr = current;
+                while(curr != null) {
+                    path.push({x: curr.x, y: curr.y});
+                    curr = curr.parent;
+                }
+                return path.reverse();
+            }
+            
+            let neighbors = getNeighbors(current);
+            for(let neighbor of neighbors) {
+                if(closedList.has(`${neighbor.x},${neighbor.y}`)) continue;
+                
+                let gScore = current.g + 1;
+                let gScoreIsBest = false;
+                
+                let existingNode = openList.find(n => n.x === neighbor.x && n.y === neighbor.y);
+                
+                if(!existingNode) {
+                    gScoreIsBest = true;
+                    neighbor.h = Math.abs(neighbor.x - targetNode.x) + Math.abs(neighbor.y - targetNode.y);
+                    openList.push(neighbor);
+                } else if(gScore < existingNode.g) {
+                    gScoreIsBest = true;
+                    neighbor = existingNode;
+                }
+                
+                if(gScoreIsBest) {
+                    neighbor.parent = current;
+                    neighbor.g = gScore;
+                    neighbor.f = neighbor.g + neighbor.h;
+                }
+            }
+        }
+        return [];
+    }
+
+
+    // --- Main Loop Updates ---
+    function update(dt) {
+        // Timer & Score
+        survivalTimer += dt;
+        score += dt * 10;
+        uiScore.innerText = Math.floor(score);
+
+        // Player Movement
+        let dx = 0, dy = 0;
+        if(keys.w || keys.ArrowUp) dy -= player.speed * dt;
+        if(keys.s || keys.ArrowDown) dy += player.speed * dt;
+        if(keys.a || keys.ArrowLeft) dx -= player.speed * dt;
+        if(keys.d || keys.ArrowRight) dx += player.speed * dt;
+
+        // X Axis Collision
+        player.x += dx;
+        if(checkWallCollision(player, currentMap)) player.x -= dx;
+        
+        // Y Axis Collision
+        player.y += dy;
+        if(checkWallCollision(player, currentMap)) player.y -= dy;
+
+        // Exit Check
+        let exitRect = {x: exitPos.x, y: exitPos.y, width: TILE_SIZE, height: TILE_SIZE};
+        if(checkRectOverlap(player, exitRect)) {
+            levelComplete();
+            return;
+        }
+
+        // Enemy AI (Robin)
+        // 1. Anger Mechanic (Speed scales up to Max)
+        enemy.angerLevel = Math.min(1, survivalTimer / 45); // Max anger reached in 45 seconds per level
+        enemy.currentSpeed = enemy.baseSpeed + (enemy.maxSpeed - enemy.baseSpeed) * enemy.angerLevel;
+        uiAngerBar.style.width = `${enemy.angerLevel * 100}%`;
+
+        // 2. Pathfinding logic
+        let ex = Math.floor((enemy.x + enemy.width/2) / TILE_SIZE);
+        let ey = Math.floor((enemy.y + enemy.height/2) / TILE_SIZE);
+        let px = Math.floor((player.x + player.width/2) / TILE_SIZE);
+        let py = Math.floor((player.y + player.height/2) / TILE_SIZE);
+
+        // Recalculate path periodically or if empty
+        if(enemy.path.length === 0 || Math.random() < 0.05) {
+            enemy.path = getPath(ex, ey, px, py);
+            if(enemy.path.length > 0) enemy.path.shift(); // remove current tile
+        }
+
+        if(enemy.path.length > 0) {
+            let targetNode = enemy.path[0];
+            let targetPixelX = targetNode.x * TILE_SIZE + (TILE_SIZE - enemy.width)/2;
+            let targetPixelY = targetNode.y * TILE_SIZE + (TILE_SIZE - enemy.height)/2;
+
+            let edx = targetPixelX - enemy.x;
+            let edy = targetPixelY - enemy.y;
+            let dist = Math.sqrt(edx*edx + edy*edy);
+
+            if(dist < 2) {
+                enemy.path.shift(); // Reached waypoint
+            } else {
+                enemy.x += (edx / dist) * enemy.currentSpeed * dt;
+                enemy.y += (edy / dist) * enemy.currentSpeed * dt;
+            }
+        }
+
+        // Player / Enemy Collision
+        let hitBoxTolerance = 8;
+        let pBox = { x: player.x + hitBoxTolerance, y: player.y + hitBoxTolerance, width: player.width - hitBoxTolerance*2, height: player.height - hitBoxTolerance*2 };
+        let eBox = { x: enemy.x + hitBoxTolerance, y: enemy.y + hitBoxTolerance, width: enemy.width - hitBoxTolerance*2, height: enemy.height - hitBoxTolerance*2 };
+        
+        if(checkRectOverlap(pBox, eBox)) {
+            gameOver();
+        }
+    }
+
+    function drawImageWithFallback(img, x, y, w, h, fallbackColor) {
+        if(img.complete && img.naturalHeight !== 0) {
+            // Draw image with slight crop/border to fit cleanly
+            ctx.save();
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, 4);
+            ctx.clip();
+            ctx.drawImage(img, x, y, w, h);
+            ctx.restore();
+        } else {
+            ctx.fillStyle = fallbackColor;
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, 4);
+            ctx.fill();
+        }
+    }
+
+    function draw() {
+        // Clear background
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Draw Map
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                if (currentMap[r][c] === 1) {
+                    ctx.fillStyle = '#1e293b'; // Wall color
+                    ctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                    // Add modern subtle border
+                    ctx.strokeStyle = '#334155';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                }
+            }
+        }
+
+        // Draw Exit
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.3)';
+        ctx.fillRect(exitPos.x, exitPos.y, TILE_SIZE, TILE_SIZE);
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(exitPos.x + 4, exitPos.y + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+        
+        // Pulsing exit core
+        let pulse = Math.abs(Math.sin(Date.now() / 200)) * 10;
+        ctx.fillStyle = '#10b981';
+        ctx.fillRect(exitPos.x + 15 - pulse/2, exitPos.y + 15 - pulse/2, 10 + pulse, 10 + pulse);
+
+        // Draw Player
+        let pImg = assets[selectedCharacter];
+        drawImageWithFallback(pImg, player.x, player.y, player.width, player.height, player.color);
+
+        // Draw Robin
+        // Intense glow based on anger
+        ctx.shadowBlur = 15 * enemy.angerLevel;
+        ctx.shadowColor = 'red';
+        drawImageWithFallback(assets.robin, enemy.x, enemy.y, enemy.width, enemy.height, enemy.color);
+        ctx.shadowBlur = 0; // reset
+    }
+
+    function gameLoop(timestamp) {
+        if(gameState !== 'PLAYING') return;
+
+        let dt = (timestamp - lastTime) / 1000;
+        if(dt > 0.1) dt = 0.1; // Cap delta time to prevent massive jumps if tab is inactive
+        lastTime = timestamp;
+
+        update(dt);
+        draw();
+
+        if(gameState === 'PLAYING') {
+            requestAnimationFrame(gameLoop);
+        }
+    }
+
+    // Initial background draw
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+</script>
+
+</body>
+</html>
