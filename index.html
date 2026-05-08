@@ -1,682 +1,1102 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Escape Robin</title>
-    <style>
-        :root {
-            --bg-color: #0f172a;
-            --panel-bg: rgba(30, 41, 59, 0.85);
-            --text-main: #f8fafc;
-            --accent: #38bdf8;
-            --accent-hover: #0ea5e9;
-            --danger: #ef4444;
-            --success: #10b981;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Escape Robin</title>
+  <style>
+    :root {
+      --bg: #08111f;
+      --panel: rgba(15, 23, 42, 0.88);
+      --panel-2: rgba(30, 41, 59, 0.7);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-2: #0ea5e9;
+      --danger: #ef4444;
+      --success: #10b981;
+      --wall: #1f2a3d;
+      --wall-border: #334155;
+      --floor: #0b1220;
+    }
 
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-        }
+    * { box-sizing: border-box; }
 
-        #game-container {
-            position: relative;
-            box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
-            border-radius: 8px;
-            overflow: hidden;
-        }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background:
+        radial-gradient(circle at top, rgba(56,189,248,0.12), transparent 35%),
+        radial-gradient(circle at bottom, rgba(239,68,68,0.08), transparent 30%),
+        var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+    }
 
-        canvas {
-            display: block;
-            background-color: #000;
-        }
+    #game-container {
+      width: min(100vw, 840px);
+      position: relative;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 20px 80px rgba(0, 0, 0, 0.55);
+      border: 1px solid rgba(148,163,184,0.15);
+      background: rgba(2,6,23,0.5);
+    }
 
-        .ui-layer {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            background: var(--panel-bg);
-            backdrop-filter: blur(5px);
-            z-index: 10;
-            transition: opacity 0.3s ease;
-        }
+    canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 14 / 10;
+      background: #07101d;
+    }
 
-        .hidden {
-            display: none !important;
-            opacity: 0;
-            pointer-events: none;
-        }
+    .ui-layer {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: linear-gradient(to bottom, rgba(2,6,23,0.72), rgba(15,23,42,0.92));
+      backdrop-filter: blur(7px);
+      z-index: 10;
+      transition: opacity .2s ease;
+      text-align: center;
+    }
 
-        h1 {
-            font-size: 3rem;
-            margin-bottom: 10px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            text-shadow: 0 0 10px var(--accent);
-        }
-        
-        h1 span.robin {
-            color: var(--danger);
-            text-shadow: 0 0 10px var(--danger);
-        }
+    .hidden {
+      display: none !important;
+      opacity: 0;
+      pointer-events: none;
+    }
 
-        .character-select {
-            display: flex;
-            gap: 20px;
-            margin: 30px 0;
-        }
+    .panel {
+      width: min(92%, 620px);
+      border: 1px solid rgba(148,163,184,0.16);
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(15,23,42,0.82), rgba(15,23,42,0.72));
+      box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+      padding: 24px 22px 20px;
+    }
 
-        .char-card {
-            background: rgba(255, 255, 255, 0.05);
-            border: 2px solid transparent;
-            border-radius: 8px;
-            padding: 10px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-align: center;
-        }
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(2rem, 5vw, 3.3rem);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      text-shadow: 0 0 18px rgba(56,189,248,0.25);
+    }
 
-        .char-card:hover {
-            transform: translateY(-5px);
-            background: rgba(255, 255, 255, 0.1);
-        }
+    h1 .robin {
+      color: var(--danger);
+      text-shadow: 0 0 18px rgba(239,68,68,0.5);
+    }
 
-        .char-card.selected {
-            border-color: var(--accent);
-            box-shadow: 0 0 15px var(--accent);
-        }
+    h2 {
+      margin: 8px 0 0;
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--text);
+    }
 
-        .char-card img {
-            width: 80px;
-            height: 80px;
-            object-fit: cover;
-            border-radius: 4px;
-            margin-bottom: 10px;
-        }
+    p {
+      color: var(--muted);
+      margin: 10px 0;
+      line-height: 1.5;
+    }
 
-        button {
-            padding: 12px 30px;
-            font-size: 1.2rem;
-            font-weight: bold;
-            color: white;
-            background: var(--accent);
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background 0.2s;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
+    .character-select {
+      display: flex;
+      gap: 14px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin: 20px 0 18px;
+    }
 
-        button:hover {
-            background: var(--accent-hover);
-        }
+    .char-card {
+      width: 130px;
+      border: 1px solid rgba(148,163,184,0.16);
+      border-radius: 14px;
+      padding: 10px;
+      background: rgba(255,255,255,0.04);
+      cursor: pointer;
+      transition: transform .15s ease, background .15s ease, border-color .15s ease;
+      user-select: none;
+    }
 
-        #hud {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            padding: 15px 20px;
-            box-sizing: border-box;
-            display: flex;
-            justify-content: space-between;
-            background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
-            z-index: 5;
-            font-size: 1.2rem;
-            font-weight: bold;
-            pointer-events: none;
-        }
+    .char-card:hover {
+      transform: translateY(-4px);
+      background: rgba(255,255,255,0.07);
+    }
 
-        .hud-stat {
-            text-shadow: 1px 1px 2px black;
-        }
+    .char-card.selected {
+      border-color: rgba(56,189,248,0.8);
+      box-shadow: 0 0 0 1px rgba(56,189,248,0.35), 0 0 22px rgba(56,189,248,0.18);
+    }
 
-        #anger-bar-container {
-            width: 200px;
-            height: 10px;
-            background: #333;
-            border-radius: 5px;
-            margin-top: 5px;
-            overflow: hidden;
-        }
+    .char-card img {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      object-fit: cover;
+      border-radius: 10px;
+      display: block;
+      margin-bottom: 8px;
+      background: rgba(255,255,255,0.06);
+    }
 
-        #anger-bar {
-            height: 100%;
-            width: 0%;
-            background: var(--danger);
-            transition: width 0.2s linear;
-        }
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 12px;
+      padding: 12px 20px;
+      cursor: pointer;
+      color: white;
+      font-weight: 800;
+      font-size: 1rem;
+      letter-spacing: .6px;
+      text-transform: uppercase;
+      background: linear-gradient(180deg, var(--accent), var(--accent-2));
+      box-shadow: 0 8px 26px rgba(14,165,233,0.22);
+      transition: transform .15s ease, filter .15s ease;
+    }
 
-        .instructions {
-            margin-top: 20px;
-            font-size: 0.9rem;
-            color: #94a3b8;
-            text-align: center;
-        }
-    </style>
+    button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.05);
+    }
+
+    .button-row {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+
+    .instructions {
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      padding: 12px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      z-index: 5;
+      pointer-events: none;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.72), rgba(0,0,0,0));
+      font-weight: 700;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.85);
+    }
+
+    .hud-left, .hud-right {
+      display: grid;
+      gap: 4px;
+      font-size: 1rem;
+    }
+
+    .hud-label {
+      color: var(--muted);
+      font-weight: 700;
+      font-size: 0.85rem;
+      letter-spacing: .3px;
+    }
+
+    .hud-value {
+      font-size: 1.02rem;
+      color: var(--text);
+    }
+
+    #anger-bar-container {
+      width: 180px;
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(148,163,184,0.22);
+      overflow: hidden;
+      margin-top: 6px;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
+    }
+
+    #anger-bar {
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #fb7185, #ef4444);
+      transition: width 0.08s linear;
+    }
+
+    .tiny {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+  </style>
 </head>
 <body>
-
-<div id="game-container">
+  <div id="game-container">
     <div id="hud" class="hidden">
-        <div class="hud-stat">Score: <span id="ui-score">0</span></div>
-        <div class="hud-stat">Level: <span id="ui-level">1</span></div>
-        <div class="hud-stat" style="text-align: right;">
-            Robin's Anger
-            <div id="anger-bar-container"><div id="anger-bar"></div></div>
+      <div class="hud-left">
+        <div><span class="hud-label">Score</span> <span class="hud-value" id="ui-score">0</span></div>
+        <div><span class="hud-label">Best</span> <span class="hud-value" id="ui-best">0</span></div>
+      </div>
+      <div class="hud-right" style="text-align:right;">
+        <div><span class="hud-label">Level</span> <span class="hud-value" id="ui-level">1</span></div>
+        <div>
+          <span class="hud-label">Robin’s Anger</span>
+          <div id="anger-bar-container"><div id="anger-bar"></div></div>
         </div>
+      </div>
     </div>
 
     <div id="main-menu" class="ui-layer">
+      <div class="panel">
         <h1>Escape <span class="robin">Robin</span></h1>
-        <p>Select your character:</p>
+        <p>Procedurally generated endless mode. Every level is solvable. Robin gets faster, but never unfairly faster than you.</p>
+
+        <p class="tiny">Choose a character</p>
         <div class="character-select">
-            <div class="char-card selected" data-char="leif">
-                <img src="leif.jpeg" alt="Leif" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'80\' height=\'80\'%3E%3Crect width=\'80\' height=\'80\' fill=\'%233b82f6\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'white\'%3ELeif%3C/text%3E%3C/svg%3E'">
-                <div>Leif</div>
-            </div>
-            <div class="char-card" data-char="lennard">
-                <img src="lennard.jpeg" alt="Lennard" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'80\' height=\'80\'%3E%3Crect width=\'80\' height=\'80\' fill=\'%238b5cf6\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'white\'%3ELennard%3C/text%3E%3C/svg%3E'">
-                <div>Lennard</div>
-            </div>
-            <div class="char-card" data-char="erim">
-                <img src="erim.jpeg" alt="Erim" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'80\' height=\'80\'%3E%3Crect width=\'80\' height=\'80\' fill=\'%2310b981\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'white\'%3EErim%3C/text%3E%3C/svg%3E'">
-                <div>Erim</div>
-            </div>
+          <div class="char-card selected" data-char="leif">
+            <img src="leif.jpeg" alt="Leif" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2780%27 height=%2780%27%3E%3Crect width=%2780%27 height=%2780%27 fill=%27%2338bdf8%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 dominant-baseline=%27middle%27 text-anchor=%27middle%27 fill=%27white%27 font-size=%2720%27%3ELeif%3C/text%3E%3C/svg%3E'">
+            <div>Leif</div>
+          </div>
+          <div class="char-card" data-char="lennard">
+            <img src="lennard.jpeg" alt="Lennard" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2780%27 height=%2780%27%3E%3Crect width=%2780%27 height=%2780%27 fill=%27%238b5cf6%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 dominant-baseline=%27middle%27 text-anchor=%27middle%27 fill=%27white%27 font-size=%2714%27%3ELennard%3C/text%3E%3C/svg%3E'">
+            <div>Lennard</div>
+          </div>
+          <div class="char-card" data-char="erim">
+            <img src="erim.jpeg" alt="Erim" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2780%27 height=%2780%27%3E%3Crect width=%2780%27 height=%2780%27 fill=%27%2310b981%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 dominant-baseline=%27middle%27 text-anchor=%27middle%27 fill=%27white%27 font-size=%2720%27%3EErim%3C/text%3E%3C/svg%3E'">
+            <div>Erim</div>
+          </div>
         </div>
-        <button id="start-btn">Start Game</button>
+
+        <div class="button-row">
+          <button id="start-btn">Start Game</button>
+        </div>
+
         <div class="instructions">
-            Use WASD or Arrow Keys to move.<br>Find the green exit. The longer you stay, the faster Robin gets!<br>Points are awarded for survival time and clearing levels.
+          Move with WASD or Arrow Keys.<br>
+          Reach the green exit before Robin catches you.<br>
+          Press P to pause.
         </div>
+      </div>
+    </div>
+
+    <div id="pause-menu" class="ui-layer hidden">
+      <div class="panel">
+        <h1>Paused</h1>
+        <p>The chase is frozen.</p>
+        <div class="button-row">
+          <button id="resume-btn">Resume</button>
+          <button id="pause-restart-btn">Restart</button>
+        </div>
+      </div>
     </div>
 
     <div id="game-over-menu" class="ui-layer hidden">
+      <div class="panel">
         <h1>Game <span class="robin">Over</span></h1>
-        <h2 style="margin: 0;">Robin caught you.</h2>
-        <p style="font-size: 1.5rem;">Final Score: <span id="final-score" style="color: var(--accent); font-weight: bold;">0</span></p>
-        <button id="restart-btn" style="margin-top: 20px;">Play Again</button>
+        <h2>Robin caught you.</h2>
+        <p>Final Score: <span id="final-score" style="color:var(--accent); font-weight:800;">0</span></p>
+        <div class="button-row">
+          <button id="restart-btn">Play Again</button>
+        </div>
+      </div>
     </div>
 
     <div id="level-transition" class="ui-layer hidden">
+      <div class="panel">
         <h1>Level <span id="transition-level">2</span></h1>
-        <p>Robin is adapting...</p>
+        <p>Robin is adapting to your route...</p>
+      </div>
     </div>
 
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
-</div>
+    <canvas id="gameCanvas" width="840" height="600"></canvas>
+  </div>
 
-<script>
-    // --- Asset Management ---
+  <script>
+    // ----------------------------
+    // Assets
+    // ----------------------------
     const assets = {
-        robin: new Image(),
-        leif: new Image(),
-        lennard: new Image(),
-        erim: new Image()
+      robin: new Image(),
+      leif: new Image(),
+      lennard: new Image(),
+      erim: new Image()
     };
     assets.robin.src = 'robin.jpeg';
     assets.leif.src = 'leif.jpeg';
     assets.lennard.src = 'lennard.jpeg';
     assets.erim.src = 'erim.jpeg';
 
-    let selectedCharacter = 'leif';
-
-    // --- Game Configuration & State ---
+    // ----------------------------
+    // Canvas / constants
+    // ----------------------------
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
+
     const TILE_SIZE = 40;
-    const COLS = canvas.width / TILE_SIZE;
-    const ROWS = canvas.height / TILE_SIZE;
+    const COLS = 21;
+    const ROWS = 15;
+    const CELL_COLS = (COLS - 1) / 2; // 10
+    const CELL_ROWS = (ROWS - 1) / 2; // 7
 
-    let gameState = 'MENU'; // MENU, PLAYING, TRANSITION, GAMEOVER
-    let score = 0;
-    let currentLevelIdx = 0;
-    let survivalTimer = 0;
-    let lastTime = 0;
-
-    // --- UI Elements ---
+    // ----------------------------
+    // UI
+    // ----------------------------
     const uiMainMenu = document.getElementById('main-menu');
+    const uiPauseMenu = document.getElementById('pause-menu');
     const uiGameOver = document.getElementById('game-over-menu');
     const uiTransition = document.getElementById('level-transition');
     const uiHud = document.getElementById('hud');
     const uiScore = document.getElementById('ui-score');
+    const uiBest = document.getElementById('ui-best');
     const uiLevel = document.getElementById('ui-level');
     const uiAngerBar = document.getElementById('anger-bar');
     const uiFinalScore = document.getElementById('final-score');
+    const uiTransitionLevel = document.getElementById('transition-level');
 
-    // --- Maps (0 = path, 1 = wall, 2 = exit, 3 = player start, 4 = robin start) ---
-    const levels = [
-        // Level 1: Simple
-        [
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-            [1,3,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,4,1],
-            [1,1,1,1,0,1,0,1,1,1,1,0,1,0,1,1,1,1,0,1],
-            [1,0,0,0,0,1,0,0,0,0,1,0,0,0,1,0,0,0,0,1],
-            [1,0,1,1,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,1],
-            [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,1],
-            [1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0,1,0,1,1],
-            [1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,1,0,0,1],
-            [1,0,1,1,1,0,1,1,1,1,1,0,1,0,1,1,1,1,0,1],
-            [1,0,1,0,0,0,0,0,0,0,1,0,1,0,1,0,0,1,0,1],
-            [1,0,1,0,1,1,1,1,1,0,1,0,1,0,1,0,1,1,0,1],
-            [1,0,1,0,1,2,0,0,1,0,0,0,0,0,1,0,0,0,0,1],
-            [1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
-            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
-        ],
-        // Level 2: Complex
-        [
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-            [1,4,0,1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,2,1],
-            [1,1,0,1,0,1,1,1,0,1,0,1,0,1,0,1,1,1,1,1],
-            [1,0,0,0,0,1,0,0,0,1,0,1,0,0,0,1,0,0,0,1],
-            [1,0,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0,1,0,1],
-            [1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,1],
-            [1,1,1,1,1,0,1,1,0,1,1,1,1,1,1,1,1,1,0,1],
-            [1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1],
-            [1,0,1,0,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0,1],
-            [1,0,1,0,0,0,0,0,0,1,0,1,0,0,0,0,0,1,0,1],
-            [1,0,1,1,1,1,1,1,0,1,0,1,0,1,1,1,0,1,0,1],
-            [1,0,0,0,0,0,0,1,0,1,0,0,0,1,3,1,0,1,0,1],
-            [1,1,1,1,1,1,0,1,0,1,1,1,1,1,0,1,0,1,0,1],
-            [1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1],
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
-        ],
-        // Level 3: Open Chaos
-        [
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-            [1,3,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,4,1],
-            [1,0,1,1,1,0,1,0,1,1,1,0,1,0,1,1,1,0,1,1],
-            [1,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,1],
-            [1,0,1,0,1,1,0,1,1,0,1,1,0,1,1,0,1,1,0,1],
-            [1,0,0,0,1,2,0,0,1,0,0,0,0,1,0,0,0,0,0,1],
-            [1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,1],
-            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-            [1,0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0,1],
-            [1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
-            [1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1],
-            [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
-            [1,1,1,0,1,0,1,1,1,1,1,1,1,1,0,1,0,1,1,1],
-            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
-        ]
-    ];
+    // ----------------------------
+    // State
+    // ----------------------------
+    const STORAGE_KEY = 'escape_robin_best_score_v2';
+    let bestScore = Number(localStorage.getItem(STORAGE_KEY) || 0);
+
+    let state = 'menu'; // menu, playing, paused, transition, gameover
+    let selectedCharacter = 'leif';
+
+    let levelNumber = 1;
+    let score = 0;
+    let survivalTime = 0;
 
     let currentMap = [];
+    let exitTile = { x: 1, y: 1 };
+    let transitionEndsAt = 0;
 
-    // --- Entities ---
+    let lastFrameTime = 0;
+
+    // ----------------------------
+    // Entities
+    // ----------------------------
     const player = {
-        x: 0, y: 0, width: 30, height: 30, speed: 200, // pixels per sec
-        vx: 0, vy: 0, color: '#38bdf8'
+      x: 0,
+      y: 0,
+      width: 28,
+      height: 28,
+      speed: 220,
+      color: '#38bdf8'
     };
 
-    const enemy = {
-        x: 0, y: 0, width: 30, height: 30, baseSpeed: 100, currentSpeed: 100, maxSpeed: 250,
-        path: [], color: '#ef4444', angerLevel: 0
+    const robin = {
+      x: 0,
+      y: 0,
+      width: 30,
+      height: 30,
+      speed: 120,
+      maxSpeed: 180,
+      anger: 0,
+      path: [],
+      pathIndex: 1,
+      repathTimer: 0,
+      lastPlayerKey: ''
     };
 
-    let exitPos = {x: 0, y: 0};
+    // ----------------------------
+    // Input
+    // ----------------------------
+    const keys = {
+      w: false, a: false, s: false, d: false,
+      ArrowUp: false, ArrowLeft: false, ArrowDown: false, ArrowRight: false
+    };
 
-    // --- Input Handling ---
-    const keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowLeft: false, ArrowDown: false, ArrowRight: false };
+    window.addEventListener('keydown', (e) => {
+      if (Object.prototype.hasOwnProperty.call(keys, e.key)) {
+        keys[e.key] = true;
+      }
 
-    window.addEventListener('keydown', (e) => { if(keys.hasOwnProperty(e.key)) keys[e.key] = true; });
-    window.addEventListener('keyup', (e) => { if(keys.hasOwnProperty(e.key)) keys[e.key] = false; });
+      if (e.repeat) return;
 
-    // UI Character Select
+      if (e.key.toLowerCase() === 'p') {
+        if (state === 'playing') pauseGame();
+        else if (state === 'paused') resumeGame();
+      }
+
+      if (e.key === 'Escape') {
+        if (state === 'playing') pauseGame();
+        else if (state === 'paused') resumeGame();
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (Object.prototype.hasOwnProperty.call(keys, e.key)) {
+        keys[e.key] = false;
+      }
+    });
+
+    // ----------------------------
+    // UI events
+    // ----------------------------
     document.querySelectorAll('.char-card').forEach(card => {
-        card.addEventListener('click', () => {
-            document.querySelectorAll('.char-card').forEach(c => c.classList.remove('selected'));
-            card.classList.add('selected');
-            selectedCharacter = card.dataset.char;
-        });
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.char-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        selectedCharacter = card.dataset.char;
+      });
     });
 
     document.getElementById('start-btn').addEventListener('click', startGame);
     document.getElementById('restart-btn').addEventListener('click', startGame);
+    document.getElementById('resume-btn').addEventListener('click', resumeGame);
+    document.getElementById('pause-restart-btn').addEventListener('click', startGame);
 
-    // --- Game Logic ---
+    uiBest.textContent = bestScore.toLocaleString();
 
-    function startGame() {
-        score = 0;
-        currentLevelIdx = 0;
-        uiMainMenu.classList.add('hidden');
-        uiGameOver.classList.add('hidden');
-        uiHud.classList.remove('hidden');
-        loadLevel(currentLevelIdx);
-        gameState = 'PLAYING';
-        lastTime = performance.now();
-        requestAnimationFrame(gameLoop);
+    // ----------------------------
+    // Helpers
+    // ----------------------------
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
     }
 
-    function loadLevel(idx) {
-        // Deep copy map
-        currentMap = levels[idx % levels.length].map(row => [...row]);
-        survivalTimer = 0;
-        enemy.angerLevel = 0;
-        enemy.currentSpeed = enemy.baseSpeed + (idx * 20); // Faster base speed per level
-        
-        for (let r = 0; r < ROWS; r++) {
-            for (let c = 0; c < COLS; c++) {
-                let val = currentMap[r][c];
-                if (val === 3) {
-                    player.x = c * TILE_SIZE + (TILE_SIZE - player.width) / 2;
-                    player.y = r * TILE_SIZE + (TILE_SIZE - player.height) / 2;
-                    currentMap[r][c] = 0;
-                } else if (val === 4) {
-                    enemy.x = c * TILE_SIZE + (TILE_SIZE - enemy.width) / 2;
-                    enemy.y = r * TILE_SIZE + (TILE_SIZE - enemy.height) / 2;
-                    currentMap[r][c] = 0;
-                } else if (val === 2) {
-                    exitPos = { x: c * TILE_SIZE, y: r * TILE_SIZE };
-                }
-            }
+    function randInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
+    function tileKey(x, y) {
+      return `${x},${y}`;
+    }
+
+    function tileCenter(tileX, tileY, entity) {
+      return {
+        x: tileX * TILE_SIZE + (TILE_SIZE - entity.width) / 2,
+        y: tileY * TILE_SIZE + (TILE_SIZE - entity.height) / 2
+      };
+    }
+
+    function entityTile(entity) {
+      return {
+        x: Math.floor((entity.x + entity.width / 2) / TILE_SIZE),
+        y: Math.floor((entity.y + entity.height / 2) / TILE_SIZE)
+      };
+    }
+
+    function isInside(x, y) {
+      return x >= 0 && x < COLS && y >= 0 && y < ROWS;
+    }
+
+    function roundRectPath(x, y, w, h, r = 6) {
+      const radius = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.arcTo(x + w, y, x + w, y + h, radius);
+      ctx.arcTo(x + w, y + h, x, y + h, radius);
+      ctx.arcTo(x, y + h, x, y, radius);
+      ctx.arcTo(x, y, x + w, y, radius);
+      ctx.closePath();
+    }
+
+    function drawSprite(img, x, y, w, h, fallbackColor, fallbackLabel) {
+      if (img.complete && img.naturalHeight !== 0) {
+        ctx.save();
+        roundRectPath(x, y, w, h, 6);
+        ctx.clip();
+        ctx.drawImage(img, x, y, w, h);
+        ctx.restore();
+      } else {
+        ctx.save();
+        roundRectPath(x, y, w, h, 6);
+        ctx.fillStyle = fallbackColor;
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.font = `700 ${Math.floor(h * 0.34)}px system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(fallbackLabel, x + w / 2, y + h / 2);
+        ctx.restore();
+      }
+    }
+
+    function rectsOverlap(a, b) {
+      return a.x < b.x + b.width &&
+             a.x + a.width > b.x &&
+             a.y < b.y + b.height &&
+             a.y + a.height > b.y;
+    }
+
+    function wallCollision(rect) {
+      const padding = 2;
+      const left = Math.floor((rect.x + padding) / TILE_SIZE);
+      const right = Math.floor((rect.x + rect.width - padding) / TILE_SIZE);
+      const top = Math.floor((rect.y + padding) / TILE_SIZE);
+      const bottom = Math.floor((rect.y + rect.height - padding) / TILE_SIZE);
+
+      for (let y = top; y <= bottom; y++) {
+        for (let x = left; x <= right; x++) {
+          if (!isInside(x, y) || currentMap[y][x] === 1) {
+            return true;
+          }
         }
-        
-        uiLevel.innerText = idx + 1;
-        uiAngerBar.style.width = '0%';
+      }
+      return false;
+    }
+
+    function moveEntityWithCollision(entity, dx, dy) {
+      entity.x += dx;
+      if (wallCollision(entity)) entity.x -= dx;
+
+      entity.y += dy;
+      if (wallCollision(entity)) entity.y -= dy;
+
+      entity.x = clamp(entity.x, 0, canvas.width - entity.width);
+      entity.y = clamp(entity.y, 0, canvas.height - entity.height);
+    }
+
+    function getOpenCellTiles(grid) {
+      const tiles = [];
+      for (let y = 1; y < ROWS - 1; y += 2) {
+        for (let x = 1; x < COLS - 1; x += 2) {
+          if (grid[y][x] !== 1) tiles.push({ x, y });
+        }
+      }
+      return tiles;
+    }
+
+    function bfsDistances(start, grid) {
+      const dist = Array.from({ length: ROWS }, () => Array(COLS).fill(-1));
+      const queue = [{ x: start.x, y: start.y }];
+      let head = 0;
+      dist[start.y][start.x] = 0;
+
+      while (head < queue.length) {
+        const cur = queue[head++];
+        const currentDist = dist[cur.y][cur.x];
+
+        const neighbors = [
+          { x: cur.x + 1, y: cur.y },
+          { x: cur.x - 1, y: cur.y },
+          { x: cur.x, y: cur.y + 1 },
+          { x: cur.x, y: cur.y - 1 }
+        ];
+
+        for (const n of neighbors) {
+          if (!isInside(n.x, n.y)) continue;
+          if (grid[n.y][n.x] === 1) continue;
+          if (dist[n.y][n.x] !== -1) continue;
+          dist[n.y][n.x] = currentDist + 1;
+          queue.push(n);
+        }
+      }
+
+      return dist;
+    }
+
+    function bfsPath(start, goal, grid) {
+      const startKey = tileKey(start.x, start.y);
+      const goalKey = tileKey(goal.x, goal.y);
+      const cameFrom = new Map();
+      const queue = [{ x: start.x, y: start.y }];
+      let head = 0;
+
+      cameFrom.set(startKey, null);
+
+      while (head < queue.length) {
+        const cur = queue[head++];
+        if (cur.x === goal.x && cur.y === goal.y) break;
+
+        const neighbors = [
+          { x: cur.x + 1, y: cur.y },
+          { x: cur.x - 1, y: cur.y },
+          { x: cur.x, y: cur.y + 1 },
+          { x: cur.x, y: cur.y - 1 }
+        ];
+
+        for (const n of neighbors) {
+          if (!isInside(n.x, n.y)) continue;
+          if (grid[n.y][n.x] === 1) continue;
+
+          const key = tileKey(n.x, n.y);
+          if (cameFrom.has(key)) continue;
+
+          cameFrom.set(key, tileKey(cur.x, cur.y));
+          queue.push(n);
+        }
+      }
+
+      if (!cameFrom.has(goalKey)) return [];
+
+      const path = [];
+      let curKey = goalKey;
+      while (curKey !== null) {
+        const [x, y] = curKey.split(',').map(Number);
+        path.push({ x, y });
+        curKey = cameFrom.get(curKey);
+      }
+      path.reverse();
+      return path;
+    }
+
+    function chooseBestEnemyCell(cells, distFromStart, distFromExit, exitTile) {
+      const sorted = [...cells].sort((a, b) => distFromStart[b.y][b.x] - distFromStart[a.y][a.x]);
+
+      for (const t of sorted) {
+        if (t.x === exitTile.x && t.y === exitTile.y) continue;
+        if (distFromStart[t.y][t.x] < 8) continue;
+        if (distFromExit[t.y][t.x] >= 6) return t;
+      }
+
+      for (const t of sorted) {
+        if (t.x !== exitTile.x || t.y !== exitTile.y) return t;
+      }
+      return { x: 1, y: 1 };
+    }
+
+    function addExtraLoops(grid, count) {
+      let safety = count * 20 + 20;
+      while (count > 0 && safety-- > 0) {
+        const x = randInt(2, COLS - 3);
+        const y = randInt(2, ROWS - 3);
+
+        if (grid[y][x] !== 1) continue;
+
+        const horizontalWall = x % 2 === 0 && y % 2 === 1;
+        const verticalWall = x % 2 === 1 && y % 2 === 0;
+
+        if (horizontalWall && grid[y][x - 1] !== 1 && grid[y][x + 1] !== 1) {
+          grid[y][x] = 0;
+          count--;
+        } else if (verticalWall && grid[y - 1][x] !== 1 && grid[y + 1][x] !== 1) {
+          grid[y][x] = 0;
+          count--;
+        }
+      }
+    }
+
+    function generateLevel(level) {
+      const grid = Array.from({ length: ROWS }, () => Array(COLS).fill(1));
+      const visited = Array.from({ length: CELL_ROWS }, () => Array(CELL_COLS).fill(false));
+      const stack = [];
+
+      const startCell = { x: 0, y: 0 };
+      visited[startCell.y][startCell.x] = true;
+      grid[1][1] = 0;
+      stack.push(startCell);
+
+      while (stack.length) {
+        const cur = stack[stack.length - 1];
+        const options = [];
+
+        const neighborCells = [
+          { x: cur.x + 1, y: cur.y },
+          { x: cur.x - 1, y: cur.y },
+          { x: cur.x, y: cur.y + 1 },
+          { x: cur.x, y: cur.y - 1 }
+        ];
+
+        for (const n of neighborCells) {
+          if (n.x < 0 || n.x >= CELL_COLS || n.y < 0 || n.y >= CELL_ROWS) continue;
+          if (!visited[n.y][n.x]) options.push(n);
+        }
+
+        if (!options.length) {
+          stack.pop();
+          continue;
+        }
+
+        const next = options[randInt(0, options.length - 1)];
+        visited[next.y][next.x] = true;
+
+        const x1 = cur.x * 2 + 1;
+        const y1 = cur.y * 2 + 1;
+        const x2 = next.x * 2 + 1;
+        const y2 = next.y * 2 + 1;
+
+        grid[y2][x2] = 0;
+        grid[(y1 + y2) / 2][(x1 + x2) / 2] = 0;
+        stack.push(next);
+      }
+
+      addExtraLoops(grid, clamp(Math.floor(level / 4), 0, 8));
+
+      const startTile = { x: 1, y: 1 };
+      const distFromStart = bfsDistances(startTile, grid);
+      const openCells = getOpenCellTiles(grid);
+
+      const exit = openCells.reduce((best, t) => {
+        const d = distFromStart[t.y][t.x];
+        if (d > best.d) return { x: t.x, y: t.y, d };
+        return best;
+      }, { x: startTile.x, y: startTile.y, d: -1 });
+
+      const distFromExit = bfsDistances(exit, grid);
+      const enemy = chooseBestEnemyCell(openCells, distFromStart, distFromExit, exit);
+
+      grid[startTile.y][startTile.x] = 3;
+      grid[exit.y][exit.x] = 2;
+      grid[enemy.y][enemy.x] = 4;
+
+      return { grid, startTile, exitTile: exit, enemyTile: enemy };
+    }
+
+    function saveBestScore() {
+      bestScore = Math.max(bestScore, Math.floor(score));
+      localStorage.setItem(STORAGE_KEY, String(bestScore));
+      uiBest.textContent = bestScore.toLocaleString();
+    }
+
+    function resetEntitiesForLevel(level) {
+      const generated = generateLevel(level);
+      currentMap = generated.grid;
+      exitTile = generated.exitTile;
+
+      const playerStart = tileCenter(generated.startTile.x, generated.startTile.y, player);
+      const enemyStart = tileCenter(generated.enemyTile.x, generated.enemyTile.y, robin);
+
+      player.x = playerStart.x;
+      player.y = playerStart.y;
+
+      robin.x = enemyStart.x;
+      robin.y = enemyStart.y;
+      robin.path = [];
+      robin.pathIndex = 1;
+      robin.repathTimer = 0;
+      robin.lastPlayerKey = '';
+
+      survivalTime = 0;
+      uiLevel.textContent = String(level);
+      uiAngerBar.style.width = '0%';
+
+      // Enemy speed stays below the player's speed so every level remains beatable.
+      robin.speed = clamp(115 + level * 2.7, 115, player.speed - 35);
+      robin.maxSpeed = player.speed - 35;
+    }
+
+    // ----------------------------
+    // Game flow
+    // ----------------------------
+    function showOnly(layer) {
+      [uiMainMenu, uiPauseMenu, uiGameOver, uiTransition].forEach(el => el.classList.add('hidden'));
+      if (layer) layer.classList.remove('hidden');
+    }
+
+    function startGame() {
+      score = 0;
+      levelNumber = 1;
+      state = 'playing';
+      showOnly(null);
+      uiHud.classList.remove('hidden');
+      resetEntitiesForLevel(levelNumber);
+      lastFrameTime = performance.now();
+      uiScore.textContent = '0';
+      uiBest.textContent = bestScore.toLocaleString();
+    }
+
+    function pauseGame() {
+      if (state !== 'playing') return;
+      state = 'paused';
+      showOnly(uiPauseMenu);
+      uiHud.classList.remove('hidden');
+    }
+
+    function resumeGame() {
+      if (state !== 'paused') return;
+      state = 'playing';
+      showOnly(null);
+      uiHud.classList.remove('hidden');
+      lastFrameTime = performance.now();
     }
 
     function levelComplete() {
-        gameState = 'TRANSITION';
-        score += 1000 + Math.floor(survivalTimer * 50); // Big bonus + survival bonus
-        currentLevelIdx++;
-        
-        document.getElementById('transition-level').innerText = currentLevelIdx + 1;
-        uiTransition.classList.remove('hidden');
-        uiHud.classList.add('hidden');
-        
-        setTimeout(() => {
-            uiTransition.classList.add('hidden');
-            uiHud.classList.remove('hidden');
-            loadLevel(currentLevelIdx);
-            gameState = 'PLAYING';
-            lastTime = performance.now();
-            requestAnimationFrame(gameLoop);
-        }, 2000);
+      if (state !== 'playing') return;
+
+      score += 600 + levelNumber * 120 + Math.floor(survivalTime * 35);
+      saveBestScore();
+
+      levelNumber += 1;
+      uiTransitionLevel.textContent = String(levelNumber);
+      state = 'transition';
+      showOnly(uiTransition);
+      uiHud.classList.remove('hidden');
+      transitionEndsAt = performance.now() + 1100;
     }
 
     function gameOver() {
-        gameState = 'GAMEOVER';
-        uiGameOver.classList.remove('hidden');
-        uiHud.classList.add('hidden');
-        uiFinalScore.innerText = score;
+      if (state === 'gameover') return;
+      state = 'gameover';
+      uiFinalScore.textContent = Math.floor(score).toLocaleString();
+      saveBestScore();
+      showOnly(uiGameOver);
+      uiHud.classList.add('hidden');
     }
 
-    // --- Collision Detection ---
-    function checkWallCollision(rect, map) {
-        let padding = 2; // slight tolerance
-        let left = Math.floor((rect.x + padding) / TILE_SIZE);
-        let right = Math.floor((rect.x + rect.width - padding) / TILE_SIZE);
-        let top = Math.floor((rect.y + padding) / TILE_SIZE);
-        let bottom = Math.floor((rect.y + rect.height - padding) / TILE_SIZE);
+    // ----------------------------
+    // Update
+    // ----------------------------
+    function update(dt, now) {
+      survivalTime += dt;
+      score += dt * (14 + levelNumber * 0.9);
+      uiScore.textContent = Math.floor(score).toLocaleString();
 
-        for (let r = top; r <= bottom; r++) {
-            for (let c = left; c <= right; c++) {
-                if (r >= 0 && r < ROWS && c >= 0 && c < COLS) {
-                    if (map[r][c] === 1) return true;
-                }
-            }
-        }
-        return false;
-    }
+      // Player movement with diagonal normalization
+      let moveX = 0;
+      let moveY = 0;
 
-    function checkRectOverlap(r1, r2) {
-        return r1.x < r2.x + r2.width &&
-               r1.x + r1.width > r2.x &&
-               r1.y < r2.y + r2.height &&
-               r1.y + r1.height > r2.y;
-    }
+      if (keys.a || keys.ArrowLeft) moveX -= 1;
+      if (keys.d || keys.ArrowRight) moveX += 1;
+      if (keys.w || keys.ArrowUp) moveY -= 1;
+      if (keys.s || keys.ArrowDown) moveY += 1;
 
-    // --- A* Pathfinding for Robin ---
-    class Node {
-        constructor(x, y, parent = null) {
-            this.x = x; this.y = y; this.parent = parent;
-            this.g = 0; this.h = 0; this.f = 0;
-        }
-    }
+      if (moveX !== 0 || moveY !== 0) {
+        const len = Math.hypot(moveX, moveY);
+        moveX = moveX / len;
+        moveY = moveY / len;
+        moveEntityWithCollision(player, moveX * player.speed * dt, moveY * player.speed * dt);
+      }
 
-    function getPath(startX, startY, endX, endY) {
-        let openList = [];
-        let closedList = new Set();
-        let startNode = new Node(startX, startY);
-        let targetNode = new Node(endX, endY);
-        
-        openList.push(startNode);
-        
-        const getNeighbors = (node) => {
-            let neighbors = [];
-            const dirs = [[0,-1], [1,0], [0,1], [-1,0]];
-            for(let dir of dirs) {
-                let nx = node.x + dir[0];
-                let ny = node.y + dir[1];
-                if(nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS && currentMap[ny][nx] !== 1) {
-                    neighbors.push(new Node(nx, ny, node));
-                }
-            }
-            return neighbors;
-        };
+      // Exit check
+      const exitRect = {
+        x: exitTile.x * TILE_SIZE,
+        y: exitTile.y * TILE_SIZE,
+        width: TILE_SIZE,
+        height: TILE_SIZE
+      };
 
-        let loops = 0;
-        while(openList.length > 0 && loops < 500) {
-            loops++;
-            // Get lowest f
-            let lowestIdx = 0;
-            for(let i=1; i<openList.length; i++) {
-                if(openList[i].f < openList[lowestIdx].f) lowestIdx = i;
-            }
-            
-            let current = openList.splice(lowestIdx, 1)[0];
-            closedList.add(`${current.x},${current.y}`);
-            
-            if(current.x === targetNode.x && current.y === targetNode.y) {
-                let path = [];
-                let curr = current;
-                while(curr != null) {
-                    path.push({x: curr.x, y: curr.y});
-                    curr = curr.parent;
-                }
-                return path.reverse();
-            }
-            
-            let neighbors = getNeighbors(current);
-            for(let neighbor of neighbors) {
-                if(closedList.has(`${neighbor.x},${neighbor.y}`)) continue;
-                
-                let gScore = current.g + 1;
-                let gScoreIsBest = false;
-                
-                let existingNode = openList.find(n => n.x === neighbor.x && n.y === neighbor.y);
-                
-                if(!existingNode) {
-                    gScoreIsBest = true;
-                    neighbor.h = Math.abs(neighbor.x - targetNode.x) + Math.abs(neighbor.y - targetNode.y);
-                    openList.push(neighbor);
-                } else if(gScore < existingNode.g) {
-                    gScoreIsBest = true;
-                    neighbor = existingNode;
-                }
-                
-                if(gScoreIsBest) {
-                    neighbor.parent = current;
-                    neighbor.g = gScore;
-                    neighbor.f = neighbor.g + neighbor.h;
-                }
-            }
-        }
-        return [];
-    }
+      if (rectsOverlap(player, exitRect)) {
+        levelComplete();
+        return;
+      }
 
+      // Robin AI
+      const pTile = entityTile(player);
+      const rTile = entityTile(robin);
+      const playerKey = tileKey(pTile.x, pTile.y);
 
-    // --- Main Loop Updates ---
-    function update(dt) {
-        // Timer & Score
-        survivalTimer += dt;
-        score += dt * 10;
-        uiScore.innerText = Math.floor(score);
+      // Anger increases over time, but speed never exceeds player's speed.
+      robin.anger = clamp(survivalTime / (18 + levelNumber * 1.5), 0, 1);
+      const targetSpeed = clamp(115 + levelNumber * 2.7 + survivalTime * 0.65, 115, robin.maxSpeed);
+      robin.speed = targetSpeed;
+      uiAngerBar.style.width = `${Math.round(robin.anger * 100)}%`;
 
-        // Player Movement
-        let dx = 0, dy = 0;
-        if(keys.w || keys.ArrowUp) dy -= player.speed * dt;
-        if(keys.s || keys.ArrowDown) dy += player.speed * dt;
-        if(keys.a || keys.ArrowLeft) dx -= player.speed * dt;
-        if(keys.d || keys.ArrowRight) dx += player.speed * dt;
+      robin.repathTimer -= dt;
+      if (robin.repathTimer <= 0 || robin.lastPlayerKey !== playerKey || robin.path.length === 0) {
+        robin.path = bfsPath(rTile, pTile, currentMap);
+        robin.pathIndex = 1;
+        robin.repathTimer = clamp(0.22 - levelNumber * 0.002, 0.08, 0.22);
+        robin.lastPlayerKey = playerKey;
+      }
 
-        // X Axis Collision
-        player.x += dx;
-        if(checkWallCollision(player, currentMap)) player.x -= dx;
-        
-        // Y Axis Collision
-        player.y += dy;
-        if(checkWallCollision(player, currentMap)) player.y -= dy;
+      const targetNode = robin.path[robin.pathIndex];
+      if (targetNode) {
+        const targetX = targetNode.x * TILE_SIZE + (TILE_SIZE - robin.width) / 2;
+        const targetY = targetNode.y * TILE_SIZE + (TILE_SIZE - robin.height) / 2;
+        const dx = targetX - robin.x;
+        const dy = targetY - robin.y;
+        const dist = Math.hypot(dx, dy);
 
-        // Exit Check
-        let exitRect = {x: exitPos.x, y: exitPos.y, width: TILE_SIZE, height: TILE_SIZE};
-        if(checkRectOverlap(player, exitRect)) {
-            levelComplete();
-            return;
-        }
-
-        // Enemy AI (Robin)
-        // 1. Anger Mechanic (Speed scales up to Max)
-        enemy.angerLevel = Math.min(1, survivalTimer / 45); // Max anger reached in 45 seconds per level
-        enemy.currentSpeed = enemy.baseSpeed + (enemy.maxSpeed - enemy.baseSpeed) * enemy.angerLevel;
-        uiAngerBar.style.width = `${enemy.angerLevel * 100}%`;
-
-        // 2. Pathfinding logic
-        let ex = Math.floor((enemy.x + enemy.width/2) / TILE_SIZE);
-        let ey = Math.floor((enemy.y + enemy.height/2) / TILE_SIZE);
-        let px = Math.floor((player.x + player.width/2) / TILE_SIZE);
-        let py = Math.floor((player.y + player.height/2) / TILE_SIZE);
-
-        // Recalculate path periodically or if empty
-        if(enemy.path.length === 0 || Math.random() < 0.05) {
-            enemy.path = getPath(ex, ey, px, py);
-            if(enemy.path.length > 0) enemy.path.shift(); // remove current tile
-        }
-
-        if(enemy.path.length > 0) {
-            let targetNode = enemy.path[0];
-            let targetPixelX = targetNode.x * TILE_SIZE + (TILE_SIZE - enemy.width)/2;
-            let targetPixelY = targetNode.y * TILE_SIZE + (TILE_SIZE - enemy.height)/2;
-
-            let edx = targetPixelX - enemy.x;
-            let edy = targetPixelY - enemy.y;
-            let dist = Math.sqrt(edx*edx + edy*edy);
-
-            if(dist < 2) {
-                enemy.path.shift(); // Reached waypoint
-            } else {
-                enemy.x += (edx / dist) * enemy.currentSpeed * dt;
-                enemy.y += (edy / dist) * enemy.currentSpeed * dt;
-            }
-        }
-
-        // Player / Enemy Collision
-        let hitBoxTolerance = 8;
-        let pBox = { x: player.x + hitBoxTolerance, y: player.y + hitBoxTolerance, width: player.width - hitBoxTolerance*2, height: player.height - hitBoxTolerance*2 };
-        let eBox = { x: enemy.x + hitBoxTolerance, y: enemy.y + hitBoxTolerance, width: enemy.width - hitBoxTolerance*2, height: enemy.height - hitBoxTolerance*2 };
-        
-        if(checkRectOverlap(pBox, eBox)) {
-            gameOver();
-        }
-    }
-
-    function drawImageWithFallback(img, x, y, w, h, fallbackColor) {
-        if(img.complete && img.naturalHeight !== 0) {
-            // Draw image with slight crop/border to fit cleanly
-            ctx.save();
-            ctx.beginPath();
-            ctx.roundRect(x, y, w, h, 4);
-            ctx.clip();
-            ctx.drawImage(img, x, y, w, h);
-            ctx.restore();
+        if (dist < 1.5) {
+          robin.x = targetX;
+          robin.y = targetY;
+          robin.pathIndex++;
         } else {
-            ctx.fillStyle = fallbackColor;
-            ctx.beginPath();
-            ctx.roundRect(x, y, w, h, 4);
-            ctx.fill();
+          robin.x += (dx / dist) * robin.speed * dt;
+          robin.y += (dy / dist) * robin.speed * dt;
         }
+      } else {
+        // Backup chase if the path is empty for any reason.
+        const dx = player.x - robin.x;
+        const dy = player.y - robin.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        robin.x += (dx / dist) * robin.speed * dt;
+        robin.y += (dy / dist) * robin.speed * dt;
+      }
+
+      // Collision with Robin
+      const hitPad = 8;
+      const pBox = {
+        x: player.x + hitPad,
+        y: player.y + hitPad,
+        width: player.width - hitPad * 2,
+        height: player.height - hitPad * 2
+      };
+      const rBox = {
+        x: robin.x + hitPad,
+        y: robin.y + hitPad,
+        width: robin.width - hitPad * 2,
+        height: robin.height - hitPad * 2
+      };
+
+      if (rectsOverlap(pBox, rBox)) {
+        gameOver();
+      }
+
+      if (score > bestScore) {
+        bestScore = Math.floor(score);
+        uiBest.textContent = bestScore.toLocaleString();
+      }
     }
 
-    function draw() {
-        // Clear background
-        ctx.fillStyle = '#0f172a';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // ----------------------------
+    // Draw
+    // ----------------------------
+    function drawBackground(now) {
+      const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      g.addColorStop(0, '#06101d');
+      g.addColorStop(1, '#091427');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Draw Map
-        for (let r = 0; r < ROWS; r++) {
-            for (let c = 0; c < COLS; c++) {
-                if (currentMap[r][c] === 1) {
-                    ctx.fillStyle = '#1e293b'; // Wall color
-                    ctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-                    // Add modern subtle border
-                    ctx.strokeStyle = '#334155';
-                    ctx.lineWidth = 1;
-                    ctx.strokeRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-                }
-            }
-        }
-
-        // Draw Exit
-        ctx.fillStyle = 'rgba(16, 185, 129, 0.3)';
-        ctx.fillRect(exitPos.x, exitPos.y, TILE_SIZE, TILE_SIZE);
-        ctx.strokeStyle = '#10b981';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(exitPos.x + 4, exitPos.y + 4, TILE_SIZE - 8, TILE_SIZE - 8);
-        
-        // Pulsing exit core
-        let pulse = Math.abs(Math.sin(Date.now() / 200)) * 10;
-        ctx.fillStyle = '#10b981';
-        ctx.fillRect(exitPos.x + 15 - pulse/2, exitPos.y + 15 - pulse/2, 10 + pulse, 10 + pulse);
-
-        // Draw Player
-        let pImg = assets[selectedCharacter];
-        drawImageWithFallback(pImg, player.x, player.y, player.width, player.height, player.color);
-
-        // Draw Robin
-        // Intense glow based on anger
-        ctx.shadowBlur = 15 * enemy.angerLevel;
-        ctx.shadowColor = 'red';
-        drawImageWithFallback(assets.robin, enemy.x, enemy.y, enemy.width, enemy.height, enemy.color);
-        ctx.shadowBlur = 0; // reset
+      // subtle stars / particles
+      ctx.save();
+      ctx.globalAlpha = 0.22;
+      for (let i = 0; i < 26; i++) {
+        const x = (i * 97 + (now * 0.02)) % canvas.width;
+        const y = (i * 53 + (now * 0.01)) % canvas.height;
+        ctx.fillStyle = i % 3 === 0 ? '#38bdf8' : '#94a3b8';
+        ctx.fillRect(x, y, 2, 2);
+      }
+      ctx.restore();
     }
 
-    function gameLoop(timestamp) {
-        if(gameState !== 'PLAYING') return;
+    function drawMap(now) {
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          const tile = currentMap[y]?.[x];
 
-        let dt = (timestamp - lastTime) / 1000;
-        if(dt > 0.1) dt = 0.1; // Cap delta time to prevent massive jumps if tab is inactive
-        lastTime = timestamp;
-
-        update(dt);
-        draw();
-
-        if(gameState === 'PLAYING') {
-            requestAnimationFrame(gameLoop);
+          if (tile === 1) {
+            ctx.fillStyle = '#1f2a3d';
+            ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x * TILE_SIZE + 0.5, y * TILE_SIZE + 0.5, TILE_SIZE - 1, TILE_SIZE - 1);
+          } else {
+            // floor
+            ctx.fillStyle = '#0b1220';
+            ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+          }
         }
+      }
+
+      // Exit
+      const ex = exitTile.x * TILE_SIZE;
+      const ey = exitTile.y * TILE_SIZE;
+      const pulse = 6 + Math.sin(now / 180) * 4;
+
+      ctx.save();
+      ctx.shadowBlur = 24;
+      ctx.shadowColor = 'rgba(16,185,129,0.8)';
+      ctx.fillStyle = 'rgba(16,185,129,0.20)';
+      ctx.fillRect(ex, ey, TILE_SIZE, TILE_SIZE);
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(ex + 4, ey + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+      ctx.fillStyle = '#10b981';
+      ctx.fillRect(ex + 20 - pulse / 2, ey + 20 - pulse / 2, pulse, pulse);
+      ctx.restore();
     }
 
-    // Initial background draw
-    ctx.fillStyle = '#0f172a';
+    function drawEntities(now) {
+      const playerImg = assets[selectedCharacter];
+
+      // Player glow
+      ctx.save();
+      ctx.shadowBlur = 14;
+      ctx.shadowColor = 'rgba(56,189,248,0.7)';
+      drawSprite(playerImg, player.x, player.y, player.width, player.height, '#38bdf8', selectedCharacter[0].toUpperCase());
+      ctx.restore();
+
+      // Robin glow scales with anger
+      ctx.save();
+      ctx.shadowBlur = 10 + robin.anger * 20;
+      ctx.shadowColor = 'rgba(239,68,68,0.85)';
+      drawSprite(assets.robin, robin.x, robin.y, robin.width, robin.height, '#ef4444', 'R');
+      ctx.restore();
+    }
+
+    function drawOverlayTint() {
+      // vignetting / mood
+      const grad = ctx.createRadialGradient(
+        canvas.width / 2, canvas.height / 2, 100,
+        canvas.width / 2, canvas.height / 2, canvas.width * 0.75
+      );
+      grad.addColorStop(0, 'rgba(0,0,0,0)');
+      grad.addColorStop(1, 'rgba(0,0,0,0.22)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function draw(now) {
+      drawBackground(now);
+      drawMap(now);
+      drawEntities(now);
+      drawOverlayTint();
+
+      // Small in-game hint in the corner
+      ctx.save();
+      ctx.fillStyle = 'rgba(15,23,42,0.68)';
+      ctx.strokeStyle = 'rgba(148,163,184,0.16)';
+      ctx.lineWidth = 1;
+      roundRectPath(12, canvas.height - 38, 220, 24, 10);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '600 12px system-ui, sans-serif';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('WASD / Arrows • P to pause', 22, canvas.height - 26);
+      ctx.restore();
+    }
+
+    // ----------------------------
+    // Main loop
+    // ----------------------------
+    function loop(now) {
+      if (!lastFrameTime) lastFrameTime = now;
+      let dt = (now - lastFrameTime) / 1000;
+      lastFrameTime = now;
+
+      // Keep deltas sane
+      dt = Math.min(dt, 0.05);
+
+      if (state === 'playing') {
+        update(dt, now);
+      } else if (state === 'transition') {
+        if (now >= transitionEndsAt) {
+          resetEntitiesForLevel(levelNumber);
+          state = 'playing';
+          showOnly(null);
+          uiHud.classList.remove('hidden');
+          lastFrameTime = now;
+        }
+      }
+
+      draw(now);
+      requestAnimationFrame(loop);
+    }
+
+    // ----------------------------
+    // Boot
+    // ----------------------------
+    showOnly(uiMainMenu);
+    uiHud.classList.add('hidden');
+    ctx.fillStyle = '#07101d';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-</script>
-
+    requestAnimationFrame(loop);
+  </script>
 </body>
 </html>
