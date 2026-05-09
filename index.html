@@ -1,904 +1,437 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Robin Arena Final - Phase 2 Edition</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robin Arena: Ultimate Showdown</title>
+    <style>
+        html, body { 
+            margin: 0; overflow: hidden; background: #05050a; 
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+        }
+        canvas { display: block; }
+        
+        #ui-layer {
+            position: absolute; top: 20px; right: 20px; z-index: 10;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        
+        .btn {
+            background: rgba(15, 15, 25, 0.8); color: #fff; 
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 10px 20px; border-radius: 4px; cursor: pointer;
+            backdrop-filter: blur(8px); transition: all 0.2s;
+            font-size: 12px; font-weight: bold; letter-spacing: 1px;
+            text-transform: uppercase; text-align: center;
+        }
+        .btn:hover { background: rgba(40, 40, 60, 0.9); border-color: #00f2ff; }
+        .btn.active { color: #00f2ff; border-color: #00f2ff; box-shadow: 0 0 15px rgba(0, 242, 255, 0.3); }
 
-<style>
-html, body {
-    margin: 0;
-    overflow: hidden;
-    background:
-        radial-gradient(circle at center, #24243d 0%, #101018 60%, #040406 100%);
-    font-family: Arial, sans-serif;
-}
-
-canvas {
-    display: block;
-}
-
-#ui-layer {
-    position: absolute;
-    top: 15px;
-    right: 15px;
-    z-index: 10;
-}
-
-#inf-toggle {
-    background: rgba(0, 0, 0, 0.4);
-    color: #fff;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    padding: 8px 16px;
-    border-radius: 8px;
-    font-family: Arial, sans-serif;
-    font-size: 14px;
-    cursor: pointer;
-    backdrop-filter: blur(4px);
-    transition: all 0.3s;
-}
-
-#inf-toggle:hover {
-    background: rgba(255, 255, 255, 0.1);
-}
-
-#inf-toggle.active {
-    background: rgba(204, 0, 255, 0.4);
-    border-color: #cc00ff;
-    box-shadow: 0 0 10px #cc00ff;
-}
-</style>
+        #combat-log {
+            position: absolute; bottom: 30px; left: 30px; width: 300px;
+            pointer-events: none; display: flex; flex-direction: column; gap: 6px;
+        }
+        .log-msg {
+            background: rgba(0, 0, 0, 0.6); color: #fff; padding: 6px 12px;
+            border-radius: 4px; font-size: 13px; animation: slideInFade 4s forwards;
+            border-left: 4px solid #444; backdrop-filter: blur(4px);
+        }
+        @keyframes slideInFade {
+            0% { opacity: 0; transform: translateX(-20px); }
+            5% { opacity: 1; transform: translateX(0); }
+            85% { opacity: 1; }
+            100% { opacity: 0; transform: translateY(-10px); }
+        }
+    </style>
 </head>
 <body>
 
 <div id="ui-layer">
-    <button id="inf-toggle">Infinite Mode: OFF</button>
+    <button id="inf-toggle" class="btn">Infinite Mode: OFF</button>
+    <button id="shake-toggle" class="btn active">Camera Shake: ON</button>
 </div>
+
+<div id="combat-log"></div>
 
 <canvas id="game"></canvas>
 
 <script>
+/** * ROBIN ARENA - ULTIMATE EDITION
+ * Logic: Healer/Tank/DPS Synergy vs Telegraphing Boss
+ */
+
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
+// --- Configuration & State ---
 let infiniteMode = false;
-let pDeaths = 0;
-let rDeaths = 0;
+let cameraShakeEnabled = true;
+let shakeTime = 0;
+let shakePower = 0;
+let gameStatus = "playing"; // playing, robin_win, players_win
+let statusTimer = 0;
 
-let pillars = [];
+function addLog(text, color = "#555") {
+    const log = document.getElementById('combat-log');
+    const msg = document.createElement('div');
+    msg.className = 'log-msg';
+    msg.style.borderLeftColor = color;
+    msg.innerText = text;
+    log.appendChild(msg);
+    if(log.childNodes.length > 5) log.removeChild(log.firstChild);
+}
 
-document.getElementById('inf-toggle').addEventListener('click', function() {
+// UI Listeners
+document.getElementById('inf-toggle').onclick = (e) => {
     infiniteMode = !infiniteMode;
-    this.classList.toggle('active', infiniteMode);
-    this.innerText = `Infinite Mode: ${infiniteMode ? 'ON' : 'OFF'}`;
-    
-    // If turned on while Robin is dead, immediately revive him for the chaos
-    if(infiniteMode && !robin.alive) {
-        respawnRobin();
-    }
-});
+    e.target.classList.toggle('active', infiniteMode);
+    e.target.innerText = `Infinite Mode: ${infiniteMode ? 'ON' : 'OFF'}`;
+};
+document.getElementById('shake-toggle').onclick = (e) => {
+    cameraShakeEnabled = !cameraShakeEnabled;
+    e.target.classList.toggle('active', cameraShakeEnabled);
+    e.target.innerText = `Camera Shake: ${cameraShakeEnabled ? 'ON' : 'OFF'}`;
+};
 
-function resize(){
-    canvas.width = innerWidth;
-    canvas.height = innerHeight;
-    initPillars();
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 }
-addEventListener("resize", resize);
-
-function initPillars() {
-    const w = canvas.width;
-    const h = canvas.height;
-    pillars = [
-        {x: w * 0.25, y: h * 0.25, r: 45},
-        {x: w * 0.75, y: h * 0.25, r: 45},
-        {x: w * 0.25, y: h * 0.75, r: 45},
-        {x: w * 0.75, y: h * 0.75, r: 45}
-    ];
-}
-
-// Initial call
+window.addEventListener('resize', resize);
 resize();
 
-function rand(min,max){ return Math.random()*(max-min)+min; }
-function clamp(v,min,max){ return Math.max(min,Math.min(max,v)); }
-
-function dist(a,b){
-    return Math.hypot(a.x-b.x,a.y-b.y);
-}
-
-function norm(x,y){
-    const l = Math.hypot(x,y) || 1;
-    return {x:x/l,y:y/l};
-}
-
-function load(src){
-    const i = new Image();
-    i.src = src;
-    return i;
-}
-
-const imgs = {
-    robin: load("robin.jpeg"),
-    leif: load("leif.jpeg"),
-    lennard: load("lennard.jpeg"),
-    erim: load("erim.jpeg")
+// --- Math Helpers ---
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const norm = (x, y) => {
+    const l = Math.hypot(x, y) || 1;
+    return { x: x / l, y: y / l };
 };
 
-const particles = [];
-const projectiles = [];
-const powerups = [];
-const texts = [];
-
-function burst(x,y,color,count=18){
-    for(let i=0;i<count;i++){
-        particles.push({
-            x,y,
-            vx: rand(-5,5),
-            vy: rand(-5,5),
-            life: rand(20,45),
-            color,
-            size: rand(2,5)
-        });
-    }
-}
-
-function textPop(x,y,text,color){
-    texts.push({
-        x,y,text,color,
-        vy: -1,
-        life: 60
-    });
-}
-
-function getNearestPowerup(entity, type=null, maxDist=Infinity) {
-    let best = null;
-    let minDist = maxDist;
-    for(const p of powerups) {
-        if(type && p.type !== type) continue;
-        const d = dist(entity, p);
-        if(d < minDist) {
-            minDist = d;
-            best = p;
-        }
-    }
-    return best;
-}
-
-// ---------- COLLISION LOGIC ----------
-function applyPillarCollision(entity) {
-    for(const p of pillars) {
-        const dx = entity.x - p.x;
-        const dy = entity.y - p.y;
-        const d = Math.hypot(dx, dy);
-        const minDist = (entity.size / 2) + p.r;
-        
-        if(d < minDist) {
-            const n = norm(dx, dy);
-            const overlap = minDist - d;
-            entity.x += n.x * overlap;
-            entity.y += n.y * overlap;
-        }
-    }
-}
-
-// ---------- ROBIN ----------
+// --- Entities ---
 const robin = {
-    x: canvas.width/2,
-    y: canvas.height/2,
-    vx: 0, vy: 0,
-    size: 88,
-    hp: 260,
-    maxHp: 260,
-    ghostHp: 260,
-    phase: 1,
-    alive: true,
-    immunity: 0,
-    facing: 0,
-    slashCd: 0, orbCd: 0, dashCd: 0, slamCd: 0,
-    shield: 0,
-    speedBuff: 1, damageBuff: 1
+    x: canvas.width / 2, y: canvas.height / 2,
+    vx: 0, vy: 0, size: 90,
+    hp: 500, maxHp: 500, ghostHp: 500,
+    phase: 1, alive: true,
+    facing: 0, dazed: 0,
+    slashCd: 0, orbCd: 0, slamCd: 0, dashCd: 0,
+    telegraph: { type: null, timer: 0, x: 0, y: 0 }
 };
 
-// ---------- PLAYERS ----------
 const runners = [
-{
-    name: "leif",
-    role: "trickster", 
-    x: 300, y: 300, vx: 0, vy: 0,
-    hp: 95, maxHp: 95, ghostHp: 95,
-    size: 44, alive: true, immunity: 2000,
-    bombCd: 0, zapCd: 0, damageBuff: 1, speedBuff: 1, dance: 0
-},
-{
-    name: "lennard",
-    role: "sniper",
-    x: 900, y: 500, vx: 0, vy: 0,
-    hp: 78, maxHp: 78, ghostHp: 78,
-    size: 42, alive: true, immunity: 2000,
-    snipeCd: 0, panicShotCd: 0, dodgeCd: 0, damageBuff: 1, speedBuff: 1, dance: 0
-},
-{
-    name: "erim",
-    role: "berserker", 
-    x: 700, y: 700, vx: 0, vy: 0,
-    hp: 115, maxHp: 115, ghostHp: 115,
-    size: 46, alive: true, immunity: 2000,
-    slashCd: 0, leapCd: 0, damageBuff: 1, speedBuff: 1, dance: 0
-}
+    { name: "Erim", role: "berserker", hp: 150, maxHp: 150, size: 50, x: 200, y: 200, alive: true, respawn: 0, slashCd: 0, healCd: 0 },
+    { name: "Lennard", role: "sniper", hp: 85, maxHp: 85, size: 42, x: 800, y: 200, alive: true, respawn: 0, snipeCd: 0, dodgeCd: 0 },
+    { name: "Leif", role: "trickster", hp: 110, maxHp: 110, size: 45, x: 500, y: 600, alive: true, respawn: 0, bombCd: 0, zapCd: 0 }
 ];
 
-// ---------- POWERUPS ----------
-function spawnPowerup(){
-    const types = ["heal","speed","damage","shield"];
-    // Prevent spawning inside pillars
-    let px, py, valid;
-    do {
-        valid = true;
-        px = rand(100,canvas.width-100);
-        py = rand(100,canvas.height-100);
-        for(const p of pillars) {
-            if(Math.hypot(px - p.x, py - p.y) < p.r + 20) valid = false;
-        }
-    } while(!valid);
+runners.forEach(r => { r.vx = 0; r.vy = 0; r.ghostHp = r.hp; });
 
-    powerups.push({
-        x: px, y: py,
-        type: types[Math.floor(Math.random()*types.length)],
-        pulse: rand(0,999)
-    });
+const particles = [];
+
+function triggerShake(power, duration) {
+    if(!cameraShakeEnabled) return;
+    shakePower = power;
+    shakeTime = duration;
 }
 
-for(let i=0;i<6;i++) spawnPowerup();
-
-// ---------- DAMAGE & DEATH ----------
-function respawnRobin() {
-    robin.alive = true;
-    robin.phase = 2; // Keep it hard in infinite mode
-    robin.maxHp = 350;
-    robin.hp = robin.maxHp;
-    robin.ghostHp = robin.maxHp;
-    robin.immunity = 1500; // brief protection
-    robin.x = canvas.width/2;
-    robin.y = canvas.height/2;
-    robin.slashCd = 0; robin.orbCd = 0; robin.dashCd = 0; robin.slamCd = 0;
-    burst(robin.x, robin.y, "#cc00ff", 80);
-    textPop(robin.x, robin.y - 40, "RESPAWNED!", "#cc00ff");
-}
-
-function damage(target,amount,sourceX,sourceY){
-    if(!target.alive) return;
-    if(target.immunity > 0) return;
-
-    if(target.shield > 0){
-        const absorbed = Math.min(target.shield, amount);
-        target.shield -= absorbed;
-        amount -= absorbed;
+function damage(target, amount, color = "#ff4444") {
+    if(!target.alive || gameStatus !== "playing") return;
+    target.hp -= amount;
+    
+    // Blood particles
+    for(let i=0; i<5; i++) {
+        particles.push({
+            x: target.x, y: target.y,
+            vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10,
+            life: 20, color: color, size: 3
+        });
     }
 
-    if(amount <= 0) return;
-
-    target.hp -= amount;
-    textPop(target.x, target.y - 20, "-" + Math.round(amount), "#ff7777");
-    burst(target.x,target.y,"#ff5555",10);
-
-    const dx = target.x-sourceX;
-    const dy = target.y-sourceY;
-    const n = norm(dx,dy);
-    target.vx += n.x * amount * 0.03;
-    target.vy += n.y * amount * 0.03;
-
-    if(target.hp <= 0){
+    if(target.hp <= 0) {
         target.hp = 0;
-        
-        if(target === robin){
+        if(target === robin) {
             if(robin.phase === 1) {
                 robin.phase = 2;
-                robin.maxHp = 350;
-                robin.hp = robin.maxHp;
-                robin.ghostHp = robin.maxHp;
-                robin.speedBuff = 1.35;
-                robin.damageBuff = 1.25;
-                robin.slashCd = 0; robin.orbCd = 0; robin.dashCd = 0; robin.slamCd = 0;
-                burst(robin.x, robin.y, "#cc00ff", 80);
-                textPop(robin.x, robin.y - 40, "PHASE 2!", "#cc00ff");
+                robin.hp = robin.maxHp = 600;
+                robin.ghostHp = 600;
+                addLog("ROBIN: THIS ISN'T EVEN MY FINAL FORM!", "#cc00ff");
+                triggerShake(15, 30);
             } else {
-                if(infiniteMode) {
-                    rDeaths++;
-                    respawnRobin();
-                } else {
-                    robin.alive = false;
-                    burst(robin.x,robin.y,"white",120);
-                    for(const r of runners){
-                        if(r.alive) r.dance = rand(0,100);
-                    }
-                }
+                robin.alive = false;
+                addLog("ROBIN HAS BEEN DEFEATED!", "#fff");
+                if(!infiniteMode) gameStatus = "players_win";
+                else setTimeout(reviveRobin, 3000);
             }
         } else {
             target.alive = false;
-            target.respawn = rand(2500,5000);
-            pDeaths++;
-            burst(target.x,target.y,"#ff2222",45);
+            target.respawn = 600; // ~10 seconds at 60fps
+            addLog(`${target.name} was eliminated!`, "#ff4444");
+            
+            if(runners.every(r => !r.alive)) {
+                gameStatus = "robin_win";
+                addLog("ROBIN: PATHETIC MORTALS.", "#ff0000");
+            }
         }
     }
 }
 
-function heal(entity,amount){
-    entity.hp = Math.min(entity.maxHp, entity.hp + amount);
+function reviveRobin() {
+    robin.alive = true; robin.hp = robin.maxHp = 700; robin.ghostHp = 700;
+    robin.x = canvas.width/2; robin.y = canvas.height/2;
+    addLog("ROBIN RESURRECTED!", "#cc00ff");
 }
 
-function shoot(owner,x,y,angle,speed,damageAmount,color,size=5,type="bullet"){
-    projectiles.push({
-        owner, x, y,
-        vx: Math.cos(angle)*speed,
-        vy: Math.sin(angle)*speed,
-        damage: damageAmount, color, size, type,
-        life: 220
+// --- AI Logic ---
+
+function updateRobin(dt) {
+    if(!robin.alive || gameStatus !== "playing") return;
+
+    robin.dazed -= 1;
+    const speed = (robin.dazed > 0) ? 0.4 : (robin.phase === 2 ? 1.4 : 1.0);
+
+    // Telegraph Handling
+    if(robin.telegraph.timer > 0) {
+        robin.telegraph.timer--;
+        if(robin.telegraph.timer === 0) {
+            if(robin.telegraph.type === "slam") {
+                triggerShake(20, 20);
+                runners.forEach(r => {
+                    if(r.alive && dist(r, robin) < 250) damage(r, 45);
+                });
+            } else if(robin.telegraph.type === "dash") {
+                triggerShake(10, 15);
+                const n = { x: Math.cos(robin.facing), y: Math.sin(robin.facing) };
+                robin.vx += n.x * 40;
+                robin.vy += n.y * 40;
+                runners.forEach(r => {
+                    if(r.alive && dist(r, robin) < 150) damage(r, 30);
+                });
+            }
+            robin.telegraph.type = null;
+        }
+        return; // Locked in animation
+    }
+
+    // Cooldowns
+    robin.slashCd--; robin.orbCd--; robin.slamCd--; robin.dashCd--;
+
+    const target = runners.filter(r => r.alive).sort((a,b) => dist(a, robin) - dist(b, robin))[0];
+    if(!target) return;
+
+    const dx = target.x - robin.x;
+    const dy = target.y - robin.y;
+    const d = Math.hypot(dx, dy);
+    robin.facing = Math.atan2(dy, dx);
+
+    // Movement
+    const n = norm(dx, dy);
+    robin.vx += n.x * 0.3 * speed;
+    robin.vy += n.y * 0.3 * speed;
+    robin.vx *= 0.92; robin.vy *= 0.92;
+    robin.x += robin.vx; robin.y += robin.vy;
+
+    // Boundary check
+    robin.x = Math.max(50, Math.min(canvas.width - 50, robin.x));
+    robin.y = Math.max(50, Math.min(canvas.height - 50, robin.y));
+
+    // Attacks
+    if(d < 100 && robin.slashCd <= 0) {
+        damage(target, 12);
+        robin.slashCd = 40;
+    }
+    if(d < 220 && robin.slamCd <= 0) {
+        robin.telegraph = { type: "slam", timer: 60 };
+        robin.slamCd = 400;
+        addLog("Robin prepares SLAM", "#ff8800");
+    }
+    if(d > 350 && robin.dashCd <= 0) {
+        robin.telegraph = { type: "dash", timer: 40 };
+        robin.dashCd = 300;
+    }
+}
+
+function updateRunners(dt) {
+    if(gameStatus !== "playing") return;
+
+    runners.forEach(r => {
+        if(!r.alive) {
+            r.respawn--;
+            if(r.respawn <= 0) {
+                r.alive = true; r.hp = r.maxHp; r.ghostHp = r.maxHp;
+                r.x = Math.random() * canvas.width; r.y = Math.random() * canvas.height;
+                addLog(`${r.name} respawned!`, "#00ff00");
+            }
+            return;
+        }
+
+        const d = dist(r, robin);
+        const n = norm(robin.x - r.x, robin.y - r.y);
+        let move = { x: 0, y: 0 };
+
+        // --- Role Logic ---
+        if(r.role === "berserker") {
+            r.slashCd--; r.healCd--;
+            // Healing Synergy
+            const lowAlly = runners.find(a => a.alive && a.hp < a.maxHp * 0.5);
+            if(lowAlly && r.healCd <= 0) {
+                r.healCd = 700;
+                addLog("Erim: HEALING CRY!", "#00ff88");
+                runners.forEach(a => { if(a.alive && dist(r, a) < 400) a.hp = Math.min(a.maxHp, a.hp + 35); });
+            }
+            if(d > 70) { move.x += n.x; move.y += n.y; }
+            if(d < 100 && r.slashCd <= 0) { damage(robin, 10, "#fff"); r.slashCd = 30; }
+        }
+
+        if(r.role === "trickster") {
+            r.bombCd--;
+            if(r.bombCd <= 0 && d < 500) {
+                r.bombCd = 400;
+                robin.dazed = 180;
+                addLog("Leif: DAZE BOMB!", "#ffee00");
+                triggerShake(5, 10);
+            }
+            if(d < 300) { move.x -= n.x; move.y -= n.y; }
+            move.x += -n.y * 0.5; move.y += n.x * 0.5; // Orbit
+        }
+
+        if(r.role === "sniper") {
+            r.snipeCd--;
+            if(r.snipeCd <= 0 && d > 200) {
+                r.snipeCd = 180;
+                damage(robin, 40, "#66ccff");
+                addLog("Lennard: PIERCING SHOT", "#66ccff");
+                triggerShake(8, 15);
+            }
+            if(d < 450) { move.x -= n.x; move.y -= n.y; }
+        }
+
+        // Apply
+        r.vx += move.x * 0.3; r.vy += move.y * 0.3;
+        r.vx *= 0.9; r.vy *= 0.9;
+        r.x += r.vx; r.y += r.vy;
+
+        // Boundaries
+        r.x = Math.max(30, Math.min(canvas.width - 30, r.x));
+        r.y = Math.max(30, Math.min(canvas.height - 30, r.y));
     });
 }
 
-// ---------- ROBIN AI ----------
-function updateRobin(dt){
-    if(!robin.alive) return;
+// --- Graphics ---
 
-    robin.immunity -= dt;
-    const cdSpeed = robin.phase === 2 ? 1.2 : 1; 
-    robin.slashCd -= dt * cdSpeed;
-    robin.orbCd -= dt * cdSpeed;
-    robin.dashCd -= dt * cdSpeed;
-    robin.slamCd -= dt * cdSpeed;
+function drawHP(e, color) {
+    const barW = 60;
+    if(e.ghostHp > e.hp) e.ghostHp -= 0.6;
+    if(e.ghostHp < e.hp) e.ghostHp = e.hp;
 
-    // Phase 2 continuous particles
-    if(robin.phase === 2 && Math.random() < 0.25) {
-        particles.push({
-            x: robin.x + rand(-30, 30),
-            y: robin.y + rand(-30, 30),
-            vx: rand(-1, 1),
-            vy: rand(-3, -1),
-            life: rand(15, 35),
-            color: "#cc00ff",
-            size: rand(2, 4)
-        });
-    }
+    const bx = e.x - barW/2;
+    const by = e.y - e.size/2 - 15;
 
-    let target = null;
-    let best = Infinity;
-
-    for(const r of runners){
-        if(!r.alive) continue;
-        const d = dist(robin,r);
-        if(d < best){
-            best = d;
-            target = r;
-        }
-    }
-
-    if(!target) return;
-
-    const dx = target.x-robin.x;
-    const dy = target.y-robin.y;
-    const d = Math.hypot(dx,dy);
-    const n = norm(dx,dy);
-
-    robin.facing = Math.atan2(dy,dx);
-
-    let moveX = n.x;
-    let moveY = n.y;
-
-    let targetPowerup = null;
-    if (robin.hp < robin.maxHp * 0.5) targetPowerup = getNearestPowerup(robin, "heal");
-    if (!targetPowerup) targetPowerup = getNearestPowerup(robin, null, 180); 
-
-    if (targetPowerup) {
-        const pn = norm(targetPowerup.x - robin.x, targetPowerup.y - robin.y);
-        if(targetPowerup.type === "heal" && robin.hp < robin.maxHp * 0.5) {
-            moveX = pn.x * 1.5;
-            moveY = pn.y * 1.5;
-        } else {
-            moveX += pn.x * 0.8;
-            moveY += pn.y * 0.8;
-        }
-    }
-
-    const moveN = norm(moveX, moveY);
-    robin.vx += moveN.x * 0.18;
-    robin.vy += moveN.y * 0.18;
-    robin.vx *= 0.93;
-    robin.vy *= 0.93;
-
-    robin.x += robin.vx * 1.8 * robin.speedBuff;
-    robin.y += robin.vy * 1.8 * robin.speedBuff;
-
-    applyPillarCollision(robin);
-    
-    robin.x = clamp(robin.x,80,canvas.width-80);
-    robin.y = clamp(robin.y,80,canvas.height-80);
-
-    if(d < 100 && robin.slashCd <= 0){
-        robin.slashCd = 700;
-        damage(target,16*robin.damageBuff,robin.x,robin.y);
-    }
-
-    if(d > 140 && robin.orbCd <= 0){
-        robin.orbCd = 2400;
-        const orbs = robin.phase === 2 ? 2 : 1;
-        for(let i=-orbs;i<=orbs;i++){
-            shoot(robin, robin.x, robin.y, robin.facing + i*0.15, 6, 13*robin.damageBuff, robin.phase === 2 ? "#cc00ff" : "#ff6666", 7, "orb");
-        }
-    }
-
-    if(d > 130 && d < 300 && robin.dashCd <= 0){
-        robin.dashCd = 4200;
-        robin.vx += n.x * 10;
-        robin.vy += n.y * 10;
-        damage(target,20*robin.damageBuff,robin.x,robin.y);
-    }
-
-    if(d < 160 && robin.slamCd <= 0){
-        robin.slamCd = 7000;
-        for(const r of runners){
-            if(!r.alive) continue;
-            if(dist(robin,r) < 160) damage(r, 24*robin.damageBuff, robin.x, robin.y);
-        }
-        burst(robin.x,robin.y, robin.phase===2 ? "#cc00ff" : "#ff4444", 50);
-    }
-}
-
-// ---------- RUNNER AI ----------
-function updateRunner(r,dt){
-    if(!r.alive){
-        r.respawn -= dt;
-        if(r.respawn <= 0 && robin.alive){
-            r.alive = true;
-            r.hp = r.maxHp;
-            r.ghostHp = r.maxHp;
-            r.immunity = 2000;
-            r.x = rand(100,canvas.width-100);
-            r.y = rand(100,canvas.height-100);
-            burst(r.x,r.y,"#66ffcc",35);
-        }
-        return;
-    }
-
-    r.immunity -= dt;
-
-    const dx = robin.x-r.x;
-    const dy = robin.y-r.y;
-    const d = Math.hypot(dx,dy);
-    const n = norm(dx,dy);
-
-    let moveX = 0;
-    let moveY = 0;
-
-    const sniper = runners.find(bot => bot.role === "sniper");
-    const sniperInDanger = sniper && sniper.alive && sniper.hp < sniper.maxHp * 0.4;
-
-    // ---------- BERSERKER (Medic/Peeler Logic) ----------
-    if(r.role === "berserker"){
-        r.slashCd -= dt;
-        r.leapCd -= dt;
-
-        if (sniperInDanger) {
-            // Hyper-aggressive peel logic: dive Robin to take heat off Sniper
-            moveX += n.x * 1.5;
-            moveY += n.y * 1.5;
-            if(Math.random() < 0.02) textPop(r.x, r.y - 30, "I GOT U!", "#ffffff");
-        } else {
-            if(d > 90){ moveX += n.x * 0.7; moveY += n.y * 0.7; }
-            moveX += -n.y * 0.3; moveY += n.x * 0.3;
-        }
-
-        if(d < 95 && r.slashCd <= 0){
-            r.slashCd = 650;
-            damage(robin, 11*r.damageBuff, r.x, r.y);
-        }
-
-        if(d > 120 && d < 280 && r.leapCd <= 0){
-            r.leapCd = 4200;
-            r.vx += n.x * 8;
-            r.vy += n.y * 8;
-            damage(robin, 22*r.damageBuff, r.x, r.y);
-            burst(r.x,r.y,"#ffee55",18);
-        }
-    }
-    // ---------- SNIPER ----------
-    else if(r.role === "sniper"){
-        r.snipeCd -= dt;
-        r.panicShotCd -= dt;
-        r.dodgeCd -= dt;
-
-        if (sniperInDanger) {
-            // Desperate retreat logic
-            moveX -= n.x * 1.8;
-            moveY -= n.y * 1.8;
-        } else if(d < 320){
-            moveX -= n.x * 1.2;
-            moveY -= n.y * 1.2;
-        }
-        moveX += -n.y * 0.18; moveY += n.x * 0.18;
-
-        if(d > 180 && r.snipeCd <= 0){
-            r.snipeCd = 550;
-            shoot(r, r.x, r.y, Math.atan2(dy,dx), 10, 8*r.damageBuff, "#66ccff", 4);
-        }
-
-        if(d < 120 && r.panicShotCd <= 0){
-            r.panicShotCd = 3200;
-            shoot(r, r.x, r.y, Math.atan2(dy,dx), 14, 32*r.damageBuff, "#ffee55", 8, "rail");
-            r.vx -= n.x * 10; r.vy -= n.y * 10;
-            burst(r.x,r.y,"#ffee55",22);
-        }
-
-        if(d < 100 && r.dodgeCd <= 0){
-            r.dodgeCd = 2400;
-            r.vx -= n.x * 12; r.vy -= n.y * 12;
-        }
-    }
-    // ---------- TRICKSTER ----------
-    else if(r.role === "trickster"){
-        r.bombCd -= dt;
-        r.zapCd -= dt;
-
-        if(d > 170){ moveX += n.x * 0.5; moveY += n.y * 0.5; }
-        if(d < 130){ moveX -= n.x * 0.9; moveY -= n.y * 0.9; }
-        moveX += -n.y * 0.55; moveY += n.x * 0.55;
-
-        if(d > 120 && d < 340 && r.bombCd <= 0){
-            r.bombCd = 1700;
-            shoot(r, r.x, r.y, Math.atan2(dy,dx), 5, 18*r.damageBuff, "#ff8888", 9, "bomb");
-        }
-
-        if(d < 220 && r.zapCd <= 0){
-            r.zapCd = 500;
-            shoot(r, r.x, r.y, Math.atan2(dy,dx) + rand(-0.15,0.15), 8, 6*r.damageBuff, "#ffd166", 5);
-        }
-    }
-
-    const margin = 170;
-    if(r.x < margin) moveX += 1;
-    if(r.x > canvas.width-margin) moveX -= 1;
-    if(r.y < margin) moveY += 1;
-    if(r.y > canvas.height-margin) moveY -= 1;
-
-    let pTarget = null;
-    if(r.hp < r.maxHp * 0.6) pTarget = getNearestPowerup(r, "heal");
-    if(!pTarget && !sniperInDanger) pTarget = getNearestPowerup(r, null, 250); // don't grab buffs if frantically peeling/fleeing
-
-    if(pTarget){
-        const pn = norm(pTarget.x-r.x, pTarget.y-r.y);
-        const weight = (pTarget.type === "heal" && r.hp < r.maxHp*0.6) ? 1.5 : 0.7;
-        moveX += pn.x * weight;
-        moveY += pn.y * weight;
-    }
-
-    r.vx += moveX * 0.12;
-    r.vy += moveY * 0.12;
-    r.vx *= 0.93;
-    r.vy *= 0.93;
-
-    r.x += r.vx * 2.2 * r.speedBuff;
-    r.y += r.vy * 2.2 * r.speedBuff;
-
-    applyPillarCollision(r);
-
-    r.x = clamp(r.x,30,canvas.width-30);
-    r.y = clamp(r.y,30,canvas.height-30);
-
-    if(!robin.alive){
-        r.dance += dt*0.01;
-        r.x += Math.sin(r.dance)*2;
-        r.y += Math.cos(r.dance*2)*2;
-    }
-}
-
-// ---------- PROJECTILES ----------
-function updateProjectiles(dt){
-    for(let i=projectiles.length-1;i>=0;i--){
-        const p = projectiles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.life -= dt;
-
-        // Pillar Collision
-        let hitPillar = false;
-        for(const pil of pillars) {
-            if(dist(p, pil) < pil.r + p.size) {
-                hitPillar = true;
-                break;
-            }
-        }
-        
-        if(hitPillar) {
-            burst(p.x, p.y, p.color, 6);
-            projectiles.splice(i, 1);
-            continue;
-        }
-
-        if(p.type === "bomb" && p.life < 120){
-            burst(p.x,p.y,"#ff8888",20);
-            if(dist(p,robin) < 90) damage(robin, p.damage, p.x, p.y);
-            projectiles.splice(i,1);
-            continue;
-        }
-
-        if(p.owner !== robin && robin.alive && dist(p,robin) < robin.size*0.45){
-            damage(robin, p.damage, p.x, p.y);
-            projectiles.splice(i,1);
-            continue;
-        }
-
-        if(p.owner === robin){
-            for(const r of runners){
-                if(!r.alive) continue;
-                if(dist(p,r) < r.size*0.45){
-                    damage(r, p.damage, p.x, p.y);
-                    projectiles.splice(i,1);
-                    break;
-                }
-            }
-        }
-
-        if(p.life <= 0) projectiles.splice(i,1);
-    }
-}
-
-// ---------- POWERUPS ----------
-function updatePowerups(dt){
-    for(let i=powerups.length-1;i>=0;i--){
-        const p = powerups[i];
-        p.pulse += dt*0.004;
-
-        if(robin.alive && dist(robin,p) < 50){
-            applyPowerup(robin,p.type);
-            powerups.splice(i,1);
-            spawnPowerup();
-            continue;
-        }
-
-        let collected = false;
-        for(const r of runners){
-            if(!r.alive) continue;
-            if(dist(r,p) < 35){
-                applyPowerup(r,p.type);
-                powerups.splice(i,1);
-                spawnPowerup();
-                collected = true;
-                break;
-            }
-        }
-        if(collected) continue;
-    }
-}
-
-function applyPowerup(entity,type){
-    if(type === "heal"){
-        heal(entity,entity.maxHp*0.3);
-        textPop(entity.x,entity.y,"+HP","#66ff99");
-    }
-    if(type === "speed"){
-        entity.speedBuff = 1.35;
-        setTimeout(()=>{ entity.speedBuff = 1; },7000);
-        textPop(entity.x,entity.y,"SPD","#66ccff");
-    }
-    if(type === "damage"){
-        entity.damageBuff = 1.5;
-        setTimeout(()=>{ entity.damageBuff = 1; },7000);
-        textPop(entity.x,entity.y,"DMG","#ff6666");
-    }
-    if(type === "shield"){
-        entity.shield = Math.min(40, entity.shield + 20);
-        textPop(entity.x,entity.y,"SHIELD","#bb66ff");
-    }
-}
-
-function updateParticles(dt){
-    for(let i=particles.length-1;i>=0;i--){
-        const p = particles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.vx *= 0.97;
-        p.vy *= 0.97;
-        p.life--;
-        if(p.life <= 0) particles.splice(i,1);
-    }
-    for(let i=texts.length-1;i>=0;i--){
-        const t = texts[i];
-        t.y += t.vy;
-        t.life--;
-        if(t.life <= 0) texts.splice(i,1);
-    }
-}
-
-// ---------- DRAW ----------
-function drawArena(){
-    const t = performance.now()*0.015;
-    ctx.strokeStyle = "rgba(255,255,255,0.04)";
-
-    for(let x=-50;x<canvas.width+50;x+=50){
-        ctx.beginPath();
-        ctx.moveTo(x+(t%50),0);
-        ctx.lineTo(x+(t%50),canvas.height);
-        ctx.stroke();
-    }
-
-    for(let y=-50;y<canvas.height+50;y+=50){
-        ctx.beginPath();
-        ctx.moveTo(0,y+(t%50));
-        ctx.lineTo(canvas.width,y+(t%50));
-        ctx.stroke();
-    }
-}
-
-function drawPillars() {
-    ctx.lineWidth = 3;
-    for(const p of pillars) {
-        ctx.beginPath();
-        ctx.strokeStyle = "rgba(100, 200, 255, 0.4)";
-        ctx.fillStyle = "rgba(10, 15, 30, 0.8)";
-        ctx.shadowColor = "#66ccff";
-        ctx.shadowBlur = 10;
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        
-        // Inner detail
-        ctx.beginPath();
-        ctx.strokeStyle = "rgba(100, 200, 255, 0.1)";
-        ctx.arc(p.x, p.y, p.r - 10, 0, Math.PI * 2);
-        ctx.stroke();
-    }
-    ctx.shadowBlur = 0;
-    ctx.lineWidth = 1;
-}
-
-function drawImage(img,x,y,size,glow,alpha=1,rot=0){
-    ctx.save();
-    ctx.translate(x,y);
-    ctx.rotate(rot);
-    ctx.globalAlpha = alpha;
-    ctx.shadowColor = glow;
-    ctx.shadowBlur = 25;
-    ctx.drawImage(img,-size/2,-size/2,size,size);
-    ctx.restore();
-}
-
-function drawHealth(entity,color, dt){
-    if(entity.ghostHp === undefined) entity.ghostHp = entity.hp;
-    
-    // Smoothly animate ghost HP dropping
-    if(entity.ghostHp > entity.hp) {
-        entity.ghostHp -= (entity.maxHp * 0.001 * dt);
-    }
-    if(entity.ghostHp < entity.hp) entity.ghostHp = entity.hp;
-
-    ctx.fillStyle = "#000";
-    ctx.fillRect(entity.x-25, entity.y-entity.size/2-16, 50, 6);
-    
-    // Ghost bar (white/yellowish)
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fillRect(bx, by, barW, 6);
     ctx.fillStyle = "#fff";
-    ctx.fillRect(entity.x-25, entity.y-entity.size/2-16, 50*(entity.ghostHp/entity.maxHp), 6);
-
-    // Real HP
+    ctx.fillRect(bx, by, barW * (e.ghostHp / e.maxHp), 6);
     ctx.fillStyle = color;
-    ctx.fillRect(entity.x-25, entity.y-entity.size/2-16, 50*(entity.hp/entity.maxHp), 6);
+    ctx.fillRect(bx, by, barW * (e.hp / e.maxHp), 6);
 }
 
-function drawScoreboard() {
-    if(!infiniteMode) return;
+function render() {
+    ctx.save();
     
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-    ctx.fillRect(canvas.width/2 - 120, 15, 240, 40);
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
-    ctx.strokeRect(canvas.width/2 - 120, 15, 240, 40);
-
-    ctx.fillStyle = "white";
-    ctx.font = "bold 16px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText(`Runners Dead: ${pDeaths}   |   Robins Slain: ${rDeaths}`, canvas.width/2, 41);
-    ctx.textAlign = "left"; // reset
-}
-
-function render(dt){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    drawArena();
-    drawPillars();
-
-    for(const p of powerups){
-        let color = "#66ccff";
-        if(p.type==="heal") color="#66ff99";
-        if(p.type==="damage") color="#ff6666";
-        if(p.type==="shield") color="#bb66ff";
-
-        ctx.beginPath();
-        ctx.fillStyle = color;
-        ctx.shadowColor = color;
-        ctx.shadowBlur = 20;
-        ctx.arc(p.x, p.y, 12+Math.sin(p.pulse)*2, 0, Math.PI*2);
-        ctx.fill();
+    // Shake
+    if(shakeTime > 0) {
+        ctx.translate((Math.random()-0.5)*shakePower, (Math.random()-0.5)*shakePower);
+        shakeTime--;
     }
 
-    for(const p of particles){
-        ctx.globalAlpha = p.life/45;
-        ctx.fillStyle = p.color;
+    // BG
+    ctx.fillStyle = "#05050a";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Arena Grid
+    ctx.strokeStyle = "rgba(255,255,255,0.03)";
+    for(let i=0; i<canvas.width; i+=80) {
+        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
+    }
+    for(let i=0; i<canvas.height; i+=80) {
+        ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke();
+    }
+
+    // Telegraphs
+    if(robin.telegraph.type === "slam") {
         ctx.beginPath();
-        ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
+        ctx.fillStyle = "rgba(255, 0, 0, 0.15)";
+        ctx.arc(robin.x, robin.y, 250, 0, Math.PI*2);
         ctx.fill();
+        ctx.strokeStyle = "rgba(255, 0, 0, 0.5)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+    if(robin.telegraph.type === "dash") {
+        ctx.save();
+        ctx.translate(robin.x, robin.y);
+        ctx.rotate(robin.facing);
+        ctx.fillStyle = "rgba(255, 100, 0, 0.15)";
+        ctx.fillRect(0, -60, 600, 120);
+        ctx.restore();
+    }
+
+    // Robin
+    if(robin.alive) {
+        ctx.save();
+        ctx.shadowBlur = 30;
+        ctx.shadowColor = robin.phase === 2 ? "#f0f" : "#f00";
+        ctx.fillStyle = "#111";
+        ctx.beginPath(); ctx.arc(robin.x, robin.y, robin.size/2, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+        drawHP(robin, robin.phase === 2 ? "#cc00ff" : "#ff4444");
+    }
+
+    // Players
+    runners.forEach(r => {
+        if(!r.alive) return;
+        ctx.fillStyle = r.role === "berserker" ? "#00ff88" : (r.role === "sniper" ? "#00ccff" : "#ffee00");
+        ctx.beginPath(); ctx.arc(r.x, r.y, r.size/2, 0, Math.PI*2); ctx.fill();
+        drawHP(r, "#00ff88");
+    });
+
+    // Particles
+    for(let i=particles.length-1; i>=0; i--) {
+        const p = particles[i];
+        p.x += p.vx; p.y += p.vy; p.life--;
+        ctx.globalAlpha = p.life / 20;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, p.size, p.size);
+        if(p.life <= 0) particles.splice(i, 1);
     }
     ctx.globalAlpha = 1;
 
-    for(const p of projectiles){
-        ctx.beginPath();
-        ctx.fillStyle = p.color;
-        ctx.shadowColor = p.color;
-        ctx.shadowBlur = 16;
-        ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
-        ctx.fill();
-    }
-
-    if(robin.alive){
-        const bossGlow = robin.phase === 2 ? "#cc00ff" : "#ff4444";
-        const immunityFlash = (robin.immunity > 0 && Math.sin(performance.now() * 0.02) > 0) ? 0.4 : 1;
-        drawImage(imgs.robin, robin.x, robin.y, robin.size, bossGlow, immunityFlash, robin.facing*0.08);
-        drawHealth(robin, bossGlow, dt);
-    } else {
-        drawImage(imgs.robin, robin.x, robin.y, robin.size, "#ffffff", 0.3, performance.now()*0.001);
-        if(!infiniteMode) {
-            ctx.fillStyle = "white";
-            ctx.font = "bold 40px Arial";
-            ctx.fillText("ROBIN DEFEATED", canvas.width/2-170, 80);
-        }
-    }
-
-    for(const r of runners){
-        if(!r.alive) continue;
+    // Overlays
+    if(gameStatus !== "playing") {
+        ctx.fillStyle = "rgba(0,0,0,0.8)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#fff";
+        ctx.textAlign = "center";
+        ctx.font = "bold 50px Arial";
+        ctx.fillText(gameStatus === "robin_win" ? "ROBIN VICTORIOUS" : "RUNNERS TRIUMPHANT", canvas.width/2, canvas.height/2);
+        ctx.font = "20px Arial";
+        ctx.fillText("Reloading Arena in 5 seconds...", canvas.width/2, canvas.height/2 + 50);
         
-        let glow = "#66aaff";
-        if(r.role==="berserker") glow="#66ff99";
-        if(r.role==="sniper") glow="#66ccff";
-        if(r.role==="trickster") glow="#ffd166";
-
-        drawImage(
-            imgs[r.name], r.x, r.y, r.size, glow,
-            r.immunity > 0 ? 0.5 + Math.sin(performance.now()*0.02)*0.3 : 1,
-            Math.sin(performance.now()*0.002+r.x)*0.05
-        );
-        drawHealth(r,"#66ff99", dt);
-
-        if(!robin.alive && !infiniteMode){
-            ctx.strokeStyle = `hsla(${(performance.now()*0.08+r.x)%360},100%,70%,0.7)`;
-            ctx.beginPath();
-            ctx.arc(r.x, r.y, 32+Math.sin(r.dance*4)*8, 0, Math.PI*2);
-            ctx.stroke();
-        }
+        statusTimer++;
+        if(statusTimer > 300) location.reload();
     }
 
-    for(const t of texts){
-        ctx.globalAlpha = t.life/60;
-        ctx.fillStyle = t.color;
-        ctx.font = "bold 16px Arial";
-        ctx.fillText(t.text,t.x,t.y);
-    }
-    ctx.globalAlpha = 1;
-    
-    drawScoreboard();
+    ctx.restore();
+    requestAnimationFrame(render);
 }
 
-// ---------- LOOP ----------
-let last = performance.now();
-function loop(now){
-    const dt = now-last;
-    last = now;
+// Loop
+setInterval(() => {
+    updateRobin();
+    updateRunners();
+}, 16);
 
-    updateRobin(dt);
-    for(const r of runners) updateRunner(r,dt);
-    updateProjectiles(dt);
-    updatePowerups(dt);
-    updateParticles(dt);
+render();
 
-    render(dt);
-    requestAnimationFrame(loop);
-}
-
-requestAnimationFrame(loop);
 </script>
 </body>
 </html>
