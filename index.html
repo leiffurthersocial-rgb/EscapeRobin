@@ -2,85 +2,186 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Robin Arena – Synergy & Telegraph</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Robin Arena – Tactical Synergy</title>
     <style>
         html, body {
             margin: 0;
             overflow: hidden;
-            background: radial-gradient(circle at center, #24243d 0%, #101018 60%, #040406 100%);
-            font-family: Arial, sans-serif;
+            background: #0a0a14;
+            font-family: 'Segoe UI', Arial, sans-serif;
         }
         canvas { display: block; }
+
         #ui-layer {
             position: absolute;
             top: 15px;
             right: 15px;
-            z-index: 10;
+            z-index: 20;
             display: flex;
             gap: 10px;
         }
         .ui-btn {
-            background: rgba(0,0,0,0.5);
+            background: rgba(10,10,20,0.7);
             color: #fff;
             border: 1px solid rgba(255,255,255,0.2);
-            padding: 8px 16px;
+            padding: 8px 18px;
             border-radius: 8px;
-            font-family: Arial, sans-serif;
             font-size: 14px;
             cursor: pointer;
-            backdrop-filter: blur(4px);
+            backdrop-filter: blur(8px);
             transition: all 0.3s;
+            font-weight: bold;
         }
-        .ui-btn:hover { background: rgba(255,255,255,0.12); }
+        .ui-btn:hover { background: rgba(255,255,255,0.15); }
         .ui-btn.active {
             background: rgba(204,0,255,0.4);
             border-color: #cc00ff;
-            box-shadow: 0 0 10px #cc00ff;
+            box-shadow: 0 0 12px #cc00ff;
+        }
+
+        #settings-panel {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(20,20,35,0.95);
+            backdrop-filter: blur(18px);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 20px;
+            padding: 25px 30px;
+            z-index: 30;
+            display: none;
+            flex-direction: column;
+            gap: 20px;
+            color: #fff;
+            min-width: 280px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+        }
+        #settings-panel h3 {
+            margin: 0 0 10px;
+            font-size: 22px;
+            text-align: center;
+            color: #cc00ff;
+        }
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .setting-row label {
+            font-size: 16px;
+        }
+        .setting-row select {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+            padding: 5px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .setting-row button {
+            background: rgba(204,0,255,0.3);
+            border: 1px solid #cc00ff;
+            color: white;
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .setting-row button.active {
+            background: #cc00ff;
+        }
+        #close-settings {
+            align-self: center;
+            background: rgba(255,255,255,0.15);
+            border: none;
+            color: white;
+            padding: 8px 20px;
+            border-radius: 20px;
+            margin-top: 10px;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
     <div id="ui-layer">
-        <button id="inf-toggle" class="ui-btn">Infinite Mode: OFF</button>
-        <button id="shake-toggle" class="ui-btn active">Camera Shake: ON</button>
+        <button id="settings-btn" class="ui-btn">⚙️ Settings</button>
     </div>
+
+    <div id="settings-panel">
+        <h3>⚙️ Settings</h3>
+        <div class="setting-row">
+            <label>Infinite Mode</label>
+            <button id="set-inf-toggle" class="">OFF</button>
+        </div>
+        <div class="setting-row">
+            <label>Camera Shake</label>
+            <button id="set-shake-toggle" class="active">ON</button>
+        </div>
+        <div class="setting-row">
+            <label>Background</label>
+            <select id="bg-select">
+                <option value="dark">Dark (default)</option>
+                <option value="red">Red Void</option>
+                <option value="cyber">Cyber Neon</option>
+            </select>
+        </div>
+        <button id="close-settings">Close</button>
+    </div>
+
     <canvas id="game"></canvas>
 
     <script>
         const canvas = document.getElementById("game");
         const ctx = canvas.getContext("2d");
 
-        // ---------- UI STATE ----------
+        // ---------- SETTINGS STATE ----------
         let infiniteMode = false;
         let cameraShakeOn = true;
+        let backgroundStyle = "dark"; // dark, red, cyber
         let pDeaths = 0;
         let rDeaths = 0;
-
-        // Camera shake
         let shakeIntensity = 0;
         const MAX_SHAKE = 18;
-
-        // Chat log
-        const chatMessages = [];
 
         // Victory state
         let robinVictory = false;
         let victoryTimer = 0;
-        const VICTORY_DURATION = 4000; // ms
+        const VICTORY_DURATION = 4000;
 
-        // ---------- TOGGLES ----------
-        document.getElementById('inf-toggle').addEventListener('click', function() {
+        // Chat messages (fade out)
+        const chatMessages = [];
+
+        // ---------- UI ELEMENTS ----------
+        const settingsBtn = document.getElementById("settings-btn");
+        const settingsPanel = document.getElementById("settings-panel");
+        const closeSettingsBtn = document.getElementById("close-settings");
+        const infToggleBtn = document.getElementById("set-inf-toggle");
+        const shakeToggleBtn = document.getElementById("set-shake-toggle");
+        const bgSelect = document.getElementById("bg-select");
+
+        settingsBtn.addEventListener("click", () => {
+            settingsPanel.style.display = "flex";
+        });
+        closeSettingsBtn.addEventListener("click", () => {
+            settingsPanel.style.display = "none";
+        });
+
+        infToggleBtn.addEventListener("click", () => {
             infiniteMode = !infiniteMode;
-            this.classList.toggle('active', infiniteMode);
-            this.innerText = `Infinite Mode: ${infiniteMode ? 'ON' : 'OFF'}`;
+            infToggleBtn.classList.toggle("active", infiniteMode);
+            infToggleBtn.innerText = infiniteMode ? "ON" : "OFF";
             if (infiniteMode && !robin.alive) respawnRobin();
         });
 
-        document.getElementById('shake-toggle').addEventListener('click', function() {
+        shakeToggleBtn.addEventListener("click", () => {
             cameraShakeOn = !cameraShakeOn;
-            this.classList.toggle('active', cameraShakeOn);
-            this.innerText = `Camera Shake: ${cameraShakeOn ? 'ON' : 'OFF'}`;
+            shakeToggleBtn.classList.toggle("active", cameraShakeOn);
+            shakeToggleBtn.innerText = cameraShakeOn ? "ON" : "OFF";
+        });
+
+        bgSelect.addEventListener("change", () => {
+            backgroundStyle = bgSelect.value;
         });
 
         // ---------- HELPER FUNCTIONS ----------
@@ -117,26 +218,26 @@
         const projectiles = [];
         const powerups = [];
         const texts = [];
+        const minions = []; // Robin's summoned minions
 
         // ---------- ENTITIES ----------
         const robin = {
             x: canvas.width / 2, y: canvas.height / 2,
             vx: 0, vy: 0,
             size: 88,
-            hp: 260, maxHp: 260, ghostHp: 260,
-            phase: 1,
+            hp: 280, maxHp: 280, ghostHp: 280,
             alive: true,
             immunity: 0,
             facing: 0,
-            slashCd: 0, orbCd: 0, dashCd: 0, slamCd: 0,
+            slashCd: 0, orbCd: 0, dashCd: 0, slamCd: 0, cometCd: 0, minionCd: 0,
             shield: 0,
             speedBuff: 1, damageBuff: 1,
-            slamTelegraph: null   // { remaining, total, x, y }
+            slamTelegraph: null
         };
 
         const runners = [
             {
-                name: "leif", role: "support",  // was trickster, now healer
+                name: "leif", role: "support",
                 x: 300, y: 300, vx: 0, vy: 0,
                 hp: 90, maxHp: 90, ghostHp: 90,
                 size: 44, alive: true, immunity: 2000,
@@ -147,14 +248,18 @@
                 x: 900, y: 500, vx: 0, vy: 0,
                 hp: 78, maxHp: 78, ghostHp: 78,
                 size: 42, alive: true, immunity: 2000,
-                snipeCd: 0, panicShotCd: 0, dodgeCd: 0, damageBuff: 1, speedBuff: 1, dance: 0
+                snipeCd: 0, panicShotCd: 0, dodgeCd: 0, vanishCd: 0, blinkCd: 0,
+                damageBuff: 1, speedBuff: 1, dance: 0,
+                invisible: false, invisTimer: 0
             },
             {
                 name: "erim", role: "berserker",
                 x: 700, y: 700, vx: 0, vy: 0,
                 hp: 115, maxHp: 115, ghostHp: 115,
                 size: 46, alive: true, immunity: 2000,
-                slashCd: 0, leapCd: 0, protectCd: 0, damageBuff: 1, speedBuff: 1, dance: 0
+                slashCd: 0, leapCd: 0, protectCd: 0, lastStandCd: 0,
+                damageBuff: 1, speedBuff: 1, dance: 0,
+                lastStandActive: false
             }
         ];
 
@@ -165,15 +270,14 @@
             do {
                 px = rand(80, canvas.width - 80);
                 py = rand(80, canvas.height - 80);
-                // keep away from edges, no pillars
-            } while (px < 50 || px > canvas.width - 50 || py < 50 || py > canvas.height - 50);
+            } while (px < 80 || px > canvas.width - 80 || py < 80 || py > canvas.height - 80);
             powerups.push({
                 x: px, y: py,
                 type: types[Math.floor(Math.random() * types.length)],
                 pulse: rand(0, 999)
             });
         }
-        for (let i = 0; i < 6; i++) spawnPowerup();
+        for (let i = 0; i < 8; i++) spawnPowerup(); // more powerups
 
         // ---------- COMBAT & EFFECTS ----------
         function burst(x, y, color, count = 18) {
@@ -194,8 +298,8 @@
         }
 
         function addChat(text) {
-            chatMessages.push({ text, life: 5000 }); // 5 sec
-            while (chatMessages.length > 6) chatMessages.shift(); // limit history
+            chatMessages.push({ text, life: 5000 });
+            while (chatMessages.length > 5) chatMessages.shift();
         }
 
         function addShake(amount) {
@@ -215,14 +319,13 @@
 
         function respawnRobin() {
             robin.alive = true;
-            robin.phase = 2;
-            robin.maxHp = 350;
+            robin.maxHp = 280;
             robin.hp = robin.maxHp;
             robin.ghostHp = robin.maxHp;
             robin.immunity = 1500;
             robin.x = canvas.width / 2;
             robin.y = canvas.height / 2;
-            robin.slashCd = robin.orbCd = robin.dashCd = robin.slamCd = 0;
+            robin.slashCd = robin.orbCd = robin.dashCd = robin.slamCd = robin.cometCd = robin.minionCd = 0;
             robin.slamTelegraph = null;
             burst(robin.x, robin.y, "#cc00ff", 80);
             textPop(robin.x, robin.y - 40, "RESPAWNED!", "#cc00ff");
@@ -233,6 +336,9 @@
         function damage(target, amount, sourceX, sourceY) {
             if (!target.alive) return;
             if (target.immunity > 0) return;
+            if (target.lastStandActive) {
+                amount *= 0.5; // 50% damage reduction during Last Stand
+            }
             if (target.shield > 0) {
                 const absorbed = Math.min(target.shield, amount);
                 target.shield -= absorbed;
@@ -250,37 +356,23 @@
             if (target.hp <= 0) {
                 target.hp = 0;
                 if (target === robin) {
-                    if (robin.phase === 1) {
-                        robin.phase = 2;
-                        robin.maxHp = 350;
-                        robin.hp = robin.maxHp;
-                        robin.ghostHp = robin.maxHp;
-                        robin.speedBuff = 1.35;
-                        robin.damageBuff = 1.25;
-                        robin.slashCd = robin.orbCd = robin.dashCd = robin.slamCd = 0;
-                        robin.slamTelegraph = null;
-                        burst(robin.x, robin.y, "#cc00ff", 80);
-                        textPop(robin.x, robin.y - 40, "PHASE 2!", "#cc00ff");
-                        addChat("Robin enters PHASE 2!");
-                        addShake(12);
+                    if (infiniteMode) {
+                        rDeaths++;
+                        respawnRobin();
                     } else {
-                        if (infiniteMode) {
-                            rDeaths++;
-                            respawnRobin();
-                        } else {
-                            robin.alive = false;
-                            burst(robin.x, robin.y, "white", 120);
-                            for (const r of runners) if (r.alive) r.dance = rand(0, 100);
-                            addShake(15);
-                            addChat("Robin DEFEATED!");
-                        }
+                        robin.alive = false;
+                        burst(robin.x, robin.y, "white", 120);
+                        for (const r of runners) if (r.alive) r.dance = rand(0, 100);
+                        addShake(15);
+                        addChat("Robin DEFEATED!");
                     }
                 } else {
                     target.alive = false;
-                    target.respawn = rand(8000, 12000); // balanced window for Robin
+                    target.respawn = rand(10000, 15000); // longer window for Robin
                     pDeaths++;
                     burst(target.x, target.y, "#ff2222", 45);
                     addChat(`${target.name.toUpperCase()} down!`);
+                    if (target.lastStandActive) target.lastStandActive = false;
                 }
             }
         }
@@ -300,41 +392,85 @@
             });
         }
 
-        // ---------- ROBIN AI ----------
+        // ---------- MINION LOGIC ----------
+        function spawnMinion(x, y) {
+            minions.push({
+                x, y,
+                hp: 35, maxHp: 35,
+                size: 28,
+                vx: 0, vy: 0,
+                target: null,
+                attackCd: 0,
+                color: "#9966ff"
+            });
+        }
+
+        function updateMinions(dt) {
+            for (let i = minions.length - 1; i >= 0; i--) {
+                const m = minions[i];
+                if (m.hp <= 0) {
+                    burst(m.x, m.y, "#9966ff", 12);
+                    minions.splice(i, 1);
+                    continue;
+                }
+                // Find closest runner
+                let target = null, bestDist = Infinity;
+                for (const r of runners) {
+                    if (!r.alive) continue;
+                    const d = dist(m, r);
+                    if (d < bestDist) { bestDist = d; target = r; }
+                }
+                if (target) {
+                    const dx = target.x - m.x, dy = target.y - m.y;
+                    const d = Math.hypot(dx, dy);
+                    const n = norm(dx, dy);
+                    if (d > 40) {
+                        m.vx += n.x * 0.25;
+                        m.vy += n.y * 0.25;
+                    }
+                    m.vx *= 0.92;
+                    m.vy *= 0.92;
+                    m.x += m.vx;
+                    m.y += m.vy;
+                    m.x = clamp(m.x, 50, canvas.width - 50);
+                    m.y = clamp(m.y, 50, canvas.height - 50);
+
+                    if (d < 50 && m.attackCd <= 0) {
+                        m.attackCd = 700;
+                        damage(target, 8, m.x, m.y);
+                    }
+                }
+                m.attackCd -= dt;
+                // Minions take damage from player projectiles (handled in projectile update)
+            }
+        }
+
+        // ---------- ROBIN AI (single phase, smarter) ----------
         function updateRobin(dt) {
             if (!robin.alive) return;
             robin.immunity -= dt;
-            const cdSpeed = robin.phase === 2 ? 1.2 : 1;
-            robin.slashCd -= dt * cdSpeed;
-            robin.orbCd -= dt * cdSpeed;
-            robin.dashCd -= dt * cdSpeed;
-            robin.slamCd -= dt * cdSpeed;
+            const cdMultiplier = 1.0;
+            robin.slashCd -= dt * cdMultiplier;
+            robin.orbCd -= dt * cdMultiplier;
+            robin.dashCd -= dt * cdMultiplier;
+            robin.slamCd -= dt * cdMultiplier;
+            robin.cometCd -= dt * cdMultiplier;
+            robin.minionCd -= dt * cdMultiplier;
 
-            // Slam telegraph timer
+            // Slam telegraph
             if (robin.slamTelegraph) {
                 robin.slamTelegraph.remaining -= dt;
                 if (robin.slamTelegraph.remaining <= 0) {
-                    // Execute slam
                     const cx = robin.slamTelegraph.x, cy = robin.slamTelegraph.y;
                     for (const r of runners) {
                         if (!r.alive) continue;
-                        if (dist({ x: cx, y: cy }, r) < 160) damage(r, 24 * robin.damageBuff, cx, cy);
+                        if (dist({ x: cx, y: cy }, r) < 160) damage(r, 28, cx, cy);
                     }
-                    burst(cx, cy, robin.phase === 2 ? "#cc00ff" : "#ff4444", 50);
+                    burst(cx, cy, "#ff4444", 50);
                     addChat("Robin used SLAM!");
                     addShake(14);
                     robin.slamTelegraph = null;
                 }
-            }
-
-            // Phase 2 ambient particles
-            if (robin.phase === 2 && Math.random() < 0.25) {
-                particles.push({
-                    x: robin.x + rand(-30, 30),
-                    y: robin.y + rand(-30, 30),
-                    vx: rand(-1, 1), vy: rand(-3, -1),
-                    life: rand(15, 35), color: "#cc00ff", size: rand(2, 4)
-                });
             }
 
             let target = null, bestDist = Infinity;
@@ -350,67 +486,87 @@
             const n = norm(dx, dy);
             robin.facing = Math.atan2(dy, dx);
 
+            // Intelligent movement: prefer not to be surrounded, slightly kite if multiple close
             let moveX = n.x, moveY = n.y;
+            const closeRunners = runners.filter(r => r.alive && dist(robin, r) < 200);
+            if (closeRunners.length >= 2) {
+                // Move away from center of group
+                let cx = 0, cy = 0;
+                for (const r of closeRunners) { cx += r.x; cy += r.y; }
+                cx /= closeRunners.length; cy /= closeRunners.length;
+                const away = norm(robin.x - cx, robin.y - cy);
+                moveX += away.x * 0.7;
+                moveY += away.y * 0.7;
+            }
 
-            // Powerup interest
-            let healTarget = null;
-            if (robin.hp < robin.maxHp * 0.5) healTarget = getNearestPowerup(robin, "heal");
-            else healTarget = getNearestPowerup(robin, null, 180);
-            if (healTarget) {
-                const pn = norm(healTarget.x - robin.x, healTarget.y - robin.y);
-                const weight = (healTarget.type === "heal" && robin.hp < robin.maxHp * 0.5) ? 1.5 : 0.8;
-                moveX += pn.x * weight;
-                moveY += pn.y * weight;
+            // Powerup seeking
+            if (robin.hp < robin.maxHp * 0.5) {
+                const healP = getNearestPowerup(robin, "heal", 300);
+                if (healP) {
+                    const pn = norm(healP.x - robin.x, healP.y - robin.y);
+                    moveX += pn.x * 1.5;
+                    moveY += pn.y * 1.5;
+                }
             }
 
             const moveN = norm(moveX, moveY);
-            robin.vx += moveN.x * 0.18;
-            robin.vy += moveN.y * 0.18;
+            robin.vx += moveN.x * 0.16;
+            robin.vy += moveN.y * 0.16;
             robin.vx *= 0.93;
             robin.vy *= 0.93;
-            robin.x += robin.vx * 1.8 * robin.speedBuff;
-            robin.y += robin.vy * 1.8 * robin.speedBuff;
-            robin.x = clamp(robin.x, 80, canvas.width - 80);
-            robin.y = clamp(robin.y, 80, canvas.height - 80);
+            robin.x += robin.vx * 1.9;
+            robin.y += robin.vy * 1.9;
+            robin.x = clamp(robin.x, 100, canvas.width - 100);
+            robin.y = clamp(robin.y, 100, canvas.height - 100);
 
-            // Slash
+            // Abilities with cooldowns
             if (d < 100 && robin.slashCd <= 0) {
-                robin.slashCd = 700;
-                damage(target, 16 * robin.damageBuff, robin.x, robin.y);
-                addChat("Robin used SLASH");
+                robin.slashCd = 650;
+                damage(target, 18, robin.x, robin.y);
+                addChat("Robin SLASH");
             }
 
-            // Orbs
             if (d > 140 && robin.orbCd <= 0) {
-                robin.orbCd = 2400;
-                const orbs = robin.phase === 2 ? 2 : 1;
-                for (let i = -orbs; i <= orbs; i++) {
-                    shoot(robin, robin.x, robin.y, robin.facing + i * 0.15, 6,
-                        13 * robin.damageBuff, robin.phase === 2 ? "#cc00ff" : "#ff6666", 7, "orb");
+                robin.orbCd = 2300;
+                for (let i = -1; i <= 1; i++) {
+                    shoot(robin, robin.x, robin.y, robin.facing + i * 0.15, 6.5, 14, "#ff6666", 7, "orb");
                 }
-                addChat("Robin fired ORBS");
+                addChat("Robin ORBS");
             }
 
-            // Dash
-            if (d > 130 && d < 300 && robin.dashCd <= 0) {
-                robin.dashCd = 4200;
+            if (d > 150 && d < 320 && robin.dashCd <= 0) {
+                robin.dashCd = 3800;
                 robin.vx += n.x * 10;
                 robin.vy += n.y * 10;
-                damage(target, 20 * robin.damageBuff, robin.x, robin.y);
-                addChat("Robin DASHED");
+                damage(target, 22, robin.x, robin.y);
+                addChat("Robin DASH");
                 addShake(6);
             }
 
-            // Slam (telegraph instead of instant)
+            // New: Slow Comet (big, slow, dodgeable)
+            if (d > 200 && robin.cometCd <= 0) {
+                robin.cometCd = 7000;
+                const angle = robin.facing + rand(-0.2, 0.2);
+                shoot(robin, robin.x, robin.y, angle, 3.2, 45, "#ffaa00", 16, "comet", { isComet: true });
+                addChat("Robin COMET");
+            }
+
+            // New: Spawn minions
+            if (closeRunners.length >= 1 && robin.minionCd <= 0 && minions.length < 4) {
+                robin.minionCd = 12000;
+                spawnMinion(robin.x + rand(-40, 40), robin.y + rand(-40, 40));
+                spawnMinion(robin.x + rand(-40, 40), robin.y + rand(-40, 40));
+                addChat("Robin SPAWNED MINIONS");
+            }
+
             if (d < 160 && robin.slamCd <= 0 && !robin.slamTelegraph) {
-                robin.slamCd = 8000;
-                robin.slamTelegraph = { remaining: 900, total: 900, x: robin.x, y: robin.y };
-                addChat("Robin is winding up a SLAM!");
-                addShake(2);
+                robin.slamCd = 8500;
+                robin.slamTelegraph = { remaining: 950, total: 950, x: robin.x, y: robin.y };
+                addChat("Robin winding up SLAM...");
             }
         }
 
-        // ---------- RUNNER AI ----------
+        // ---------- RUNNER AI (smarter synergy) ----------
         function updateRunner(r, dt) {
             if (!r.alive) {
                 r.respawn -= dt;
@@ -419,150 +575,193 @@
                     r.hp = r.maxHp;
                     r.ghostHp = r.maxHp;
                     r.immunity = 2000;
-                    r.x = rand(100, canvas.width - 100);
-                    r.y = rand(100, canvas.height - 100);
+                    r.x = rand(150, canvas.width - 150);
+                    r.y = rand(150, canvas.height - 150);
                     burst(r.x, r.y, "#66ffcc", 35);
                     addChat(`${r.name} respawned.`);
+                    if (r.lastStandActive) r.lastStandActive = false;
                 }
                 return;
             }
 
             r.immunity -= dt;
+            if (r.invisible) {
+                r.invisTimer -= dt;
+                if (r.invisTimer <= 0) r.invisible = false;
+            }
+
             const dx = robin.x - r.x, dy = robin.y - r.y;
             const d = Math.hypot(dx, dy);
             const n = norm(dx, dy);
 
             const sniper = runners.find(b => b.role === "sniper");
-            const sniperInDanger = sniper && sniper.alive && sniper.hp < sniper.maxHp * 0.4;
+            const support = runners.find(b => b.role === "support");
+            const sniperInDanger = sniper && sniper.alive && sniper.hp < sniper.maxHp * 0.5;
+            const selfLow = r.hp < r.maxHp * 0.4;
 
             let moveX = 0, moveY = 0;
 
-            // ---------- SUPPORT (Leif) ----------
+            // ---------- SUPPORT ----------
             if (r.role === "support") {
                 r.healBombCd -= dt;
                 r.zapCd -= dt;
 
-                // Heal ally logic
-                const allies = runners.filter(a => a.alive && a !== r && a.hp < a.maxHp * 0.5);
-                let healTarget = null;
-                if (allies.length > 0) {
-                    // pick lowest HP
-                    healTarget = allies.reduce((a, b) => a.hp < b.hp ? a : b);
-                }
-
-                if (healTarget && r.healBombCd <= 0 && dist(r, healTarget) > 40) {
-                    // Fire heal bomb at ally
-                    r.healBombCd = 8000;
-                    const angle = Math.atan2(healTarget.y - r.y, healTarget.x - r.x);
-                    shoot(r, r.x, r.y, angle, 5, 0, "#88ff88", 10, "healBomb", { healAmount: 30 });
-                    addChat("Leif used HEAL BOMB");
+                // Heal allies if low
+                const allies = runners.filter(a => a.alive && a !== r && a.hp < a.maxHp * 0.6);
+                if (allies.length > 0 && r.healBombCd <= 0) {
+                    const closestLow = allies.reduce((a, b) => dist(r, a) < dist(r, b) ? a : b);
+                    const angle = Math.atan2(closestLow.y - r.y, closestLow.x - r.x);
+                    shoot(r, r.x, r.y, angle, 5, 0, "#88ff88", 10, "healBomb", { healAmount: 35 });
+                    r.healBombCd = 7500;
+                    addChat("Leif HEAL BOMB");
                 } else {
-                    // Normal movement: stay at medium distance
-                    if (d > 170) { moveX += n.x * 0.5; moveY += n.y * 0.5; }
-                    if (d < 130) { moveX -= n.x * 0.9; moveY -= n.y * 0.9; }
-                    moveX += -n.y * 0.55; moveY += n.x * 0.55;
+                    if (d > 180) { moveX += n.x * 0.6; moveY += n.y * 0.6; }
+                    if (d < 140) { moveX -= n.x * 0.8; moveY -= n.y * 0.8; }
+                    moveX += -n.y * 0.45; moveY += n.x * 0.45;
                 }
 
-                // Zap attack
-                if (d < 220 && r.zapCd <= 0) {
-                    r.zapCd = 500;
-                    shoot(r, r.x, r.y, Math.atan2(dy, dx) + rand(-0.15, 0.15), 8, 6 * r.damageBuff, "#ffd166", 5);
+                if (d < 230 && r.zapCd <= 0) {
+                    r.zapCd = 480;
+                    shoot(r, r.x, r.y, Math.atan2(dy, dx) + rand(-0.1, 0.1), 7.5, 7, "#ffd166", 5);
                 }
             }
-            // ---------- BERSERKER ----------
+            // ---------- BERSERKER (Last Stand, protect) ----------
             else if (r.role === "berserker") {
                 r.slashCd -= dt;
                 r.leapCd -= dt;
                 r.protectCd -= dt;
+                r.lastStandCd -= dt;
 
-                if (sniperInDanger && r.protectCd <= 0 && dist(r, sniper) < 200) {
-                    // Shield the sniper
+                // Last Stand: activate when low HP and not on cooldown
+                if (selfLow && r.lastStandCd <= 0 && !r.lastStandActive) {
+                    r.lastStandActive = true;
+                    r.lastStandCd = 25000;
+                    textPop(r.x, r.y - 40, "LAST STAND!", "#ffaa00");
+                    addChat("Erim enters LAST STAND");
+                    setTimeout(() => { r.lastStandActive = false; }, 5000);
+                }
+
+                // Protect sniper if in danger and nearby
+                if (sniperInDanger && r.protectCd <= 0 && dist(r, sniper) < 220) {
                     sniper.shield = Math.min(40, sniper.shield + 30);
-                    r.protectCd = 10000;
-                    burst(sniper.x, sniper.y, "#bb66ff", 20);
+                    r.protectCd = 11000;
                     textPop(sniper.x, sniper.y - 30, "PROTECTED", "#bb66ff");
                     addChat("Erim SHIELDED Lennard");
                 }
 
-                if (sniperInDanger) {
-                    moveX += n.x * 1.5;
-                    moveY += n.y * 1.5;
+                if (selfLow) {
+                    // Retreat toward support or powerup
+                    const healP = getNearestPowerup(r, "heal", 300);
+                    if (healP) {
+                        const pn = norm(healP.x - r.x, healP.y - r.y);
+                        moveX += pn.x * 1.6;
+                        moveY += pn.y * 1.6;
+                    } else if (support && support.alive) {
+                        const sn = norm(support.x - r.x, support.y - r.y);
+                        moveX += sn.x * 0.9;
+                        moveY += sn.y * 0.9;
+                    } else {
+                        moveX -= n.x * 1.2;
+                        moveY -= n.y * 1.2;
+                    }
                 } else {
                     if (d > 90) { moveX += n.x * 0.7; moveY += n.y * 0.7; }
-                    moveX += -n.y * 0.3; moveY += n.x * 0.3;
+                    moveX += -n.y * 0.35; moveY += n.x * 0.35;
                 }
 
                 if (d < 95 && r.slashCd <= 0) {
-                    r.slashCd = 650;
-                    damage(robin, 11 * r.damageBuff, r.x, r.y);
+                    r.slashCd = 700;
+                    damage(robin, 12, r.x, r.y);
                 }
-                if (d > 120 && d < 280 && r.leapCd <= 0) {
-                    r.leapCd = 4200;
+                if (d > 120 && d < 290 && r.leapCd <= 0 && !selfLow) {
+                    r.leapCd = 4500;
                     r.vx += n.x * 8;
                     r.vy += n.y * 8;
-                    damage(robin, 22 * r.damageBuff, r.x, r.y);
+                    damage(robin, 23, r.x, r.y);
                     burst(r.x, r.y, "#ffee55", 18);
-                    addChat("Erim LEAPED");
+                    addChat("Erim LEAP");
                 }
             }
-            // ---------- SNIPER ----------
+            // ---------- SNIPER (Vanish / Blink) ----------
             else if (r.role === "sniper") {
                 r.snipeCd -= dt;
                 r.panicShotCd -= dt;
                 r.dodgeCd -= dt;
+                r.vanishCd -= dt;
+                r.blinkCd -= dt;
 
-                if (sniperInDanger) {
-                    moveX -= n.x * 1.8;
-                    moveY -= n.y * 1.8;
+                // Vanish when Robin is close and not on cooldown
+                if (d < 150 && r.vanishCd <= 0 && !r.invisible) {
+                    r.invisible = true;
+                    r.invisTimer = 2800;
+                    r.vanishCd = 14000;
+                    addChat("Lennard VANISHED");
+                    textPop(r.x, r.y - 30, "VANISH", "#aaaaff");
+                }
+                // Blink away if in danger and vanish on cooldown
+                if (d < 130 && r.blinkCd <= 0 && !r.invisible) {
+                    r.blinkCd = 11000;
+                    const angle = Math.atan2(r.y - robin.y, r.x - robin.x) + rand(-0.5, 0.5);
+                    r.x += Math.cos(angle) * 200;
+                    r.y += Math.sin(angle) * 200;
+                    r.x = clamp(r.x, 80, canvas.width - 80);
+                    r.y = clamp(r.y, 80, canvas.height - 80);
+                    burst(r.x, r.y, "#aaaaff", 20);
+                    addChat("Lennard BLINKED");
+                }
+
+                if (sniperInDanger || selfLow) {
+                    moveX -= n.x * 1.9;
+                    moveY -= n.y * 1.9;
                 } else if (d < 320) {
-                    moveX -= n.x * 1.2;
-                    moveY -= n.y * 1.2;
+                    moveX -= n.x * 1.3;
+                    moveY -= n.y * 1.3;
                 }
-                moveX += -n.y * 0.18; moveY += n.x * 0.18;
+                moveX += -n.y * 0.2; moveY += n.x * 0.2;
 
-                if (d > 180 && r.snipeCd <= 0) {
-                    r.snipeCd = 550;
-                    shoot(r, r.x, r.y, Math.atan2(dy, dx), 10, 8 * r.damageBuff, "#66ccff", 4);
+                if (d > 190 && r.snipeCd <= 0) {
+                    r.snipeCd = 600;
+                    shoot(r, r.x, r.y, Math.atan2(dy, dx), 10.5, 9, "#66ccff", 4);
                 }
-                if (d < 120 && r.panicShotCd <= 0) {
-                    r.panicShotCd = 3200;
-                    shoot(r, r.x, r.y, Math.atan2(dy, dx), 14, 32 * r.damageBuff, "#ffee55", 8, "rail");
+                if (d < 130 && r.panicShotCd <= 0) {
+                    r.panicShotCd = 3500;
+                    shoot(r, r.x, r.y, Math.atan2(dy, dx), 15, 35, "#ffee55", 9, "rail");
                     r.vx -= n.x * 10; r.vy -= n.y * 10;
-                    burst(r.x, r.y, "#ffee55", 22);
+                    burst(r.x, r.y, "#ffee55", 25);
                     addChat("Lennard PANIC SHOT");
                 }
-                if (d < 100 && r.dodgeCd <= 0) {
-                    r.dodgeCd = 2400;
-                    r.vx -= n.x * 12; r.vy -= n.y * 12;
+                if (d < 100 && r.dodgeCd <= 0 && !r.invisible) {
+                    r.dodgeCd = 2200;
+                    r.vx -= n.x * 13; r.vy -= n.y * 13;
                 }
             }
 
-            // Map boundaries
-            const margin = 170;
-            if (r.x < margin) moveX += 1;
-            if (r.x > canvas.width - margin) moveX -= 1;
-            if (r.y < margin) moveY += 1;
-            if (r.y > canvas.height - margin) moveY -= 1;
+            // Boundaries (larger margin)
+            const margin = 250;
+            if (r.x < margin) moveX += 1.2;
+            if (r.x > canvas.width - margin) moveX -= 1.2;
+            if (r.y < margin) moveY += 1.2;
+            if (r.y > canvas.height - margin) moveY -= 1.2;
 
             // Powerup seeking
             let pTarget = null;
             if (r.hp < r.maxHp * 0.6) pTarget = getNearestPowerup(r, "heal");
-            if (!pTarget && !sniperInDanger) pTarget = getNearestPowerup(r, null, 250);
+            if (!pTarget && !selfLow) pTarget = getNearestPowerup(r, null, 260);
             if (pTarget) {
                 const pn = norm(pTarget.x - r.x, pTarget.y - r.y);
-                const weight = (pTarget.type === "heal" && r.hp < r.maxHp * 0.6) ? 1.5 : 0.7;
+                const weight = (pTarget.type === "heal" && r.hp < r.maxHp * 0.6) ? 1.5 : 0.8;
                 moveX += pn.x * weight;
                 moveY += pn.y * weight;
             }
 
-            r.vx += moveX * 0.12;
-            r.vy += moveY * 0.12;
+            r.vx += moveX * 0.13;
+            r.vy += moveY * 0.13;
             r.vx *= 0.93;
             r.vy *= 0.93;
-            r.x += r.vx * 2.2 * r.speedBuff;
-            r.y += r.vy * 2.2 * r.speedBuff;
-            r.x = clamp(r.x, 30, canvas.width - 30);
-            r.y = clamp(r.y, 30, canvas.height - 30);
+            r.x += r.vx * 2.3 * r.speedBuff;
+            r.y += r.vy * 2.3 * r.speedBuff;
+            r.x = clamp(r.x, 40, canvas.width - 40);
+            r.y = clamp(r.y, 40, canvas.height - 40);
 
             if (!robin.alive && !robinVictory) {
                 r.dance += dt * 0.01;
@@ -571,7 +770,7 @@
             }
         }
 
-        // ---------- PROJECTILES ----------
+        // ---------- PROJECTILES (updated for minion damage) ----------
         function updateProjectiles(dt) {
             for (let i = projectiles.length - 1; i >= 0; i--) {
                 const p = projectiles[i];
@@ -579,32 +778,46 @@
                 p.y += p.vy;
                 p.life -= dt;
 
-                // Heal bomb explosion logic
+                // Heal bomb
                 if (p.type === "healBomb" && p.life < 120) {
-                    const healAmt = p.healAmount || 30;
                     for (const r of runners) {
                         if (!r.alive) continue;
-                        if (dist(p, r) < 90) heal(r, healAmt);
+                        if (dist(p, r) < 90) heal(r, p.healAmount || 35);
                     }
                     burst(p.x, p.y, "#88ff88", 16);
                     projectiles.splice(i, 1);
                     continue;
                 }
 
-                // Out of bounds
-                if (p.x < -50 || p.x > canvas.width + 50 || p.y < -50 || p.y > canvas.height + 50) {
+                // Comet explosion (large AoE when hitting edge or expiring)
+                if (p.isComet && (p.life <= 0 || p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height)) {
+                    burst(p.x, p.y, "#ffaa00", 25);
+                    for (const r of runners) {
+                        if (!r.alive) continue;
+                        if (dist(p, r) < 100) damage(r, p.damage, p.x, p.y);
+                    }
                     projectiles.splice(i, 1);
                     continue;
                 }
 
-                // Hit Robin
+                // Minion collision with projectiles (only player projectiles damage minions)
+                if (p.owner !== robin) {
+                    for (let m of minions) {
+                        if (dist(p, m) < m.size * 0.5) {
+                            m.hp -= p.damage;
+                            projectiles.splice(i, 1);
+                            burst(p.x, p.y, p.color, 4);
+                            break;
+                        }
+                    }
+                }
+
                 if (p.owner !== robin && robin.alive && dist(p, robin) < robin.size * 0.45) {
                     damage(robin, p.damage, p.x, p.y);
                     projectiles.splice(i, 1);
                     continue;
                 }
 
-                // Hit runners (Robin's projectiles)
                 if (p.owner === robin) {
                     for (const r of runners) {
                         if (!r.alive) continue;
@@ -646,11 +859,9 @@
 
         function applyPowerup(entity, type) {
             switch (type) {
-                case "heal":
-                    heal(entity, entity.maxHp * 0.3);
-                    break;
+                case "heal": heal(entity, entity.maxHp * 0.3); break;
                 case "speed":
-                    entity.speedBuff = 1.35;
+                    entity.speedBuff = 1.4;
                     setTimeout(() => { entity.speedBuff = 1; }, 7000);
                     textPop(entity.x, entity.y, "SPD", "#66ccff");
                     break;
@@ -660,7 +871,7 @@
                     textPop(entity.x, entity.y, "DMG", "#ff6666");
                     break;
                 case "shield":
-                    entity.shield = Math.min(40, entity.shield + 20);
+                    entity.shield = Math.min(40, entity.shield + 25);
                     textPop(entity.x, entity.y, "SHIELD", "#bb66ff");
                     break;
             }
@@ -680,7 +891,6 @@
                 t.life--;
                 if (t.life <= 0) texts.splice(i, 1);
             }
-            // Chat messages decay
             for (let i = chatMessages.length - 1; i >= 0; i--) {
                 chatMessages[i].life -= dt;
                 if (chatMessages[i].life <= 0) chatMessages.splice(i, 1);
@@ -691,15 +901,13 @@
         function checkVictory() {
             if (robinVictory) return;
             if (!robin.alive) return;
-            const allDead = runners.every(r => !r.alive);
-            if (allDead) {
+            if (runners.every(r => !r.alive)) {
                 robinVictory = true;
                 victoryTimer = VICTORY_DURATION;
-                addShake(20);
+                addShake(22);
                 addChat("Robin WINS!");
-                burst(robin.x, robin.y, "#cc00ff", 120);
+                burst(robin.x, robin.y, "#cc00ff", 150);
                 textPop(robin.x, robin.y - 50, "ROBIN WINS!", "#cc00ff");
-                // Prevent further damage during victory
                 robin.immunity = VICTORY_DURATION;
             }
         }
@@ -707,29 +915,50 @@
         function restartGame() {
             robinVictory = false;
             victoryTimer = 0;
-            // Respawn all runners
             for (const r of runners) {
                 if (!r.alive) {
                     r.alive = true;
                     r.hp = r.maxHp;
                     r.ghostHp = r.maxHp;
                     r.immunity = 2000;
-                    r.x = rand(100, canvas.width - 100);
-                    r.y = rand(100, canvas.height - 100);
+                    r.x = rand(150, canvas.width - 150);
+                    r.y = rand(150, canvas.height - 150);
                 }
             }
-            // Heal robin if alive, otherwise no change
             if (robin.alive) {
                 robin.hp = robin.maxHp;
                 robin.ghostHp = robin.maxHp;
             }
             burst(robin.x, robin.y, "#ffffff", 60);
+            minions.length = 0;
         }
 
         // ---------- RENDERING ----------
+        function drawBackground() {
+            let grad;
+            if (backgroundStyle === "red") {
+                grad = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 0, canvas.width/2, canvas.height/2, canvas.width);
+                grad.addColorStop(0, "#3d1a1a");
+                grad.addColorStop(0.7, "#180a0a");
+                grad.addColorStop(1, "#020000");
+            } else if (backgroundStyle === "cyber") {
+                grad = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 0, canvas.width/2, canvas.height/2, canvas.width);
+                grad.addColorStop(0, "#1a1a4d");
+                grad.addColorStop(0.6, "#0f0f2a");
+                grad.addColorStop(1, "#000011");
+            } else {
+                grad = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 0, canvas.width/2, canvas.height/2, canvas.width);
+                grad.addColorStop(0, "#24243d");
+                grad.addColorStop(0.6, "#101018");
+                grad.addColorStop(1, "#040406");
+            }
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
         function drawArena() {
             const t = performance.now() * 0.015;
-            ctx.strokeStyle = "rgba(255,255,255,0.04)";
+            ctx.strokeStyle = "rgba(255,255,255,0.03)";
             for (let x = -50; x < canvas.width + 50; x += 50) {
                 ctx.beginPath(); ctx.moveTo(x + (t % 50), 0); ctx.lineTo(x + (t % 50), canvas.height); ctx.stroke();
             }
@@ -761,41 +990,26 @@
             ctx.fillRect(entity.x - 25, entity.y - entity.size / 2 - 16, 50 * (entity.hp / entity.maxHp), 6);
         }
 
-        function drawScoreboard() {
-            if (!infiniteMode) return;
-            ctx.fillStyle = "rgba(0,0,0,0.5)";
-            ctx.fillRect(canvas.width / 2 - 120, 15, 240, 40);
-            ctx.strokeStyle = "rgba(255,255,255,0.2)";
-            ctx.strokeRect(canvas.width / 2 - 120, 15, 240, 40);
-            ctx.fillStyle = "white";
-            ctx.font = "bold 16px Arial";
-            ctx.textAlign = "center";
-            ctx.fillText(`Runners Dead: ${pDeaths}   |   Robins Slain: ${rDeaths}`, canvas.width / 2, 41);
-            ctx.textAlign = "left";
-        }
-
         function drawChat() {
-            const startY = 20;
+            const startY = 25;
             for (let i = 0; i < chatMessages.length; i++) {
                 const msg = chatMessages[i];
-                const alpha = Math.min(1, msg.life / 1500); // fade out last 1.5s
+                const alpha = Math.min(1, msg.life / 1500);
                 ctx.globalAlpha = alpha;
                 ctx.fillStyle = "white";
-                ctx.font = "bold 14px monospace";
-                ctx.fillText(msg.text, 20, startY + i * 22);
+                ctx.font = "bold 13px monospace";
+                ctx.fillText(msg.text, 25, startY + i * 24);
             }
             ctx.globalAlpha = 1;
         }
 
         function render(dt) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // Camera shake
+            drawBackground();
             let shakeX = 0, shakeY = 0;
             if (cameraShakeOn && shakeIntensity > 0.1) {
                 shakeX = (Math.random() - 0.5) * shakeIntensity * 2;
                 shakeY = (Math.random() - 0.5) * shakeIntensity * 2;
-                shakeIntensity *= 0.9; // decay
+                shakeIntensity *= 0.88;
             }
             ctx.save();
             ctx.translate(shakeX, shakeY);
@@ -836,48 +1050,69 @@
                 ctx.fill();
             }
 
-            // Robin slam telegraph
+            // Minions
+            for (const m of minions) {
+                ctx.fillStyle = "#9966ff";
+                ctx.shadowColor = "#9966ff";
+                ctx.shadowBlur = 15;
+                ctx.beginPath();
+                ctx.arc(m.x, m.y, m.size/2, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = "white";
+                ctx.font = "10px Arial";
+                ctx.fillText(Math.ceil(m.hp), m.x-10, m.y-20);
+            }
+
+            // Slam telegraph
             if (robin.slamTelegraph) {
                 const progress = 1 - robin.slamTelegraph.remaining / robin.slamTelegraph.total;
                 const radius = 160 * progress;
                 ctx.beginPath();
-                ctx.strokeStyle = "rgba(255,0,0,0.7)";
+                ctx.strokeStyle = "rgba(255,50,50,0.7)";
                 ctx.lineWidth = 3;
-                ctx.arc(robin.slamTelegraph.x, robin.slamTelegraph.y, radius, 0, Math.PI * 2);
+                ctx.arc(robin.slamTelegraph.x, robin.slamTelegraph.y, radius, 0, Math.PI*2);
                 ctx.stroke();
                 ctx.lineWidth = 1;
             }
 
             // Robin
             if (robin.alive) {
-                const bossGlow = robin.phase === 2 ? "#cc00ff" : "#ff4444";
-                const immunityFlash = (robin.immunity > 0 && Math.sin(performance.now() * 0.02) > 0) ? 0.4 : 1;
-                drawImage(imgs.robin, robin.x, robin.y, robin.size, bossGlow, immunityFlash, robin.facing * 0.08);
-                drawHealth(robin, bossGlow, dt);
+                const glow = "#ff4444";
+                const immunityFlash = (robin.immunity > 0 && Math.sin(performance.now()*0.02) > 0) ? 0.4 : 1;
+                drawImage(imgs.robin, robin.x, robin.y, robin.size, glow, immunityFlash, robin.facing*0.08);
+                drawHealth(robin, glow, dt);
             } else {
-                drawImage(imgs.robin, robin.x, robin.y, robin.size, "#ffffff", 0.3, performance.now() * 0.001);
-                if (!infiniteMode) {
+                drawImage(imgs.robin, robin.x, robin.y, robin.size, "#ffffff", 0.3, performance.now()*0.001);
+                if (!infiniteMode && !robinVictory) {
                     ctx.fillStyle = "white";
                     ctx.font = "bold 40px Arial";
-                    ctx.fillText("ROBIN DEFEATED", canvas.width / 2 - 170, 80);
+                    ctx.fillText("ROBIN DEFEATED", canvas.width/2-170, 80);
                 }
             }
 
             // Runners
             for (const r of runners) {
                 if (!r.alive) continue;
+                if (r.invisible) continue; // invisible
                 let glow = "#66aaff";
                 if (r.role === "berserker") glow = "#66ff99";
                 if (r.role === "sniper") glow = "#66ccff";
                 if (r.role === "support") glow = "#ffd166";
                 drawImage(imgs[r.name], r.x, r.y, r.size, glow,
-                    r.immunity > 0 ? 0.5 + Math.sin(performance.now() * 0.02) * 0.3 : 1,
-                    Math.sin(performance.now() * 0.002 + r.x) * 0.05);
+                    r.immunity > 0 ? 0.5 + Math.sin(performance.now()*0.02)*0.3 : 1,
+                    Math.sin(performance.now()*0.002 + r.x)*0.05);
                 drawHealth(r, "#66ff99", dt);
-                if (!robin.alive && !robinVictory && !infiniteMode) {
-                    ctx.strokeStyle = `hsla(${(performance.now() * 0.08 + r.x) % 360},100%,70%,0.7)`;
+                if (r.lastStandActive) {
+                    ctx.strokeStyle = "#ffaa00";
+                    ctx.lineWidth = 3;
                     ctx.beginPath();
-                    ctx.arc(r.x, r.y, 32 + Math.sin(r.dance * 4) * 8, 0, Math.PI * 2);
+                    ctx.arc(r.x, r.y, r.size*0.7, 0, Math.PI*2);
+                    ctx.stroke();
+                }
+                if (!robin.alive && !robinVictory && !infiniteMode) {
+                    ctx.strokeStyle = `hsla(${(performance.now()*0.08+r.x)%360},100%,70%,0.7)`;
+                    ctx.beginPath();
+                    ctx.arc(r.x, r.y, 32+Math.sin(r.dance*4)*8, 0, Math.PI*2);
                     ctx.stroke();
                 }
             }
@@ -890,21 +1125,16 @@
                 ctx.fillText(t.text, t.x, t.y);
             }
             ctx.globalAlpha = 1;
+            ctx.restore();
 
-            ctx.restore(); // end shake translation
-
-            // UI elements that stay fixed (not shaken)
-            drawScoreboard();
             drawChat();
-
-            // Victory overlay
             if (robinVictory) {
-                ctx.fillStyle = `rgba(0,0,0,${0.3 + Math.sin(performance.now()*0.01)*0.1})`;
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = `rgba(0,0,0,${0.3+Math.sin(performance.now()*0.01)*0.1})`;
+                ctx.fillRect(0,0,canvas.width,canvas.height);
                 ctx.fillStyle = "#cc00ff";
                 ctx.font = "bold 60px Arial";
                 ctx.textAlign = "center";
-                ctx.fillText("ROBIN WINS!", canvas.width / 2, canvas.height / 2);
+                ctx.fillText("ROBIN WINS!", canvas.width/2, canvas.height/2);
                 ctx.textAlign = "left";
             }
         }
@@ -912,15 +1142,14 @@
         // ---------- GAME LOOP ----------
         let last = performance.now();
         function loop(now) {
-            const dt = now - last;
+            const dt = Math.min(now - last, 35);
             last = now;
 
             if (robinVictory) {
                 victoryTimer -= dt;
                 if (victoryTimer <= 0) restartGame();
-                // During victory, still run visuals but pause AI? Keep movement minimal.
                 updateParticles(dt);
-                for (const r of runners) if (r.alive) r.dance += dt * 0.01;
+                for (const r of runners) if (r.alive) r.dance += dt*0.01;
                 render(dt);
                 requestAnimationFrame(loop);
                 return;
@@ -928,6 +1157,7 @@
 
             updateRobin(dt);
             for (const r of runners) updateRunner(r, dt);
+            updateMinions(dt);
             updateProjectiles(dt);
             updatePowerups(dt);
             updateParticles(dt);
