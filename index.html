@@ -2,40 +2,46 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Robin Arena Chase</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Robin Arena Evolution</title>
+
 <style>
-    html, body {
-        margin: 0;
-        overflow: hidden;
-        background: radial-gradient(circle at center, #1e1e2f, #0b0b13);
-        font-family: Arial, sans-serif;
-    }
+html, body {
+    margin: 0;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at center, #242438 0%, #11111a 60%, #050507 100%);
+    font-family: Arial, sans-serif;
+}
 
-    canvas {
-        display: block;
-    }
+canvas {
+    display: block;
+}
 
-    #info {
-        position: absolute;
-        top: 10px;
-        left: 10px;
-        color: white;
-        background: rgba(0,0,0,0.35);
-        padding: 10px 14px;
-        border-radius: 12px;
-        backdrop-filter: blur(4px);
-        font-size: 14px;
-        line-height: 1.5;
-    }
+#ui {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    color: white;
+    background: rgba(0,0,0,0.35);
+    padding: 12px 16px;
+    border-radius: 14px;
+    backdrop-filter: blur(5px);
+    line-height: 1.45;
+    font-size: 14px;
+}
+
+#ui b {
+    color: #ff8080;
+}
 </style>
 </head>
 <body>
 
-<div id="info">
-    <b>Robin Hunt Arena</b><br>
-    Robin grows after each catch.<br>
-    The others respawn with temporary immunity.
+<div id="ui">
+    <b>Robin Arena Evolution</b><br>
+    Smart AI pathing • Powerups • Combat<br>
+    If Robin dies, the runners celebrate.
 </div>
 
 <canvas id="game"></canvas>
@@ -45,193 +51,384 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
 function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    canvas.width = innerWidth;
+    canvas.height = innerHeight;
 }
-window.addEventListener("resize", resize);
+addEventListener("resize", resize);
 resize();
 
-// ---------- IMAGE LOADING ----------
-function loadImage(src) {
-    const img = new Image();
-    img.src = src;
-    return img;
+function rand(min,max){ return Math.random()*(max-min)+min; }
+function clamp(v,min,max){ return Math.max(min,Math.min(max,v)); }
+
+function dist(a,b){
+    return Math.hypot(a.x-b.x,a.y-b.y);
 }
 
-const images = {
-    robin: loadImage("robin.jpeg"),
-    leif: loadImage("leif.jpeg"),
-    lennard: loadImage("lennard.jpeg"),
-    erim: loadImage("erim.jpeg")
+function normalize(x,y){
+    const l = Math.hypot(x,y) || 1;
+    return {x:x/l,y:y/l};
+}
+
+function load(src){
+    const i = new Image();
+    i.src = src;
+    return i;
+}
+
+const imgs = {
+    robin: load("robin.jpeg"),
+    leif: load("leif.jpeg"),
+    lennard: load("lennard.jpeg"),
+    erim: load("erim.jpeg")
 };
 
-// ---------- UTILS ----------
-function rand(min, max) {
-    return Math.random() * (max - min) + min;
-}
-
-function dist(a, b) {
-    return Math.hypot(a.x - b.x, a.y - b.y);
-}
+const arenaPadding = 80;
 
 // ---------- ROBIN ----------
 const robin = {
-    x: window.innerWidth / 2,
-    y: window.innerHeight / 2,
-    size: 70,
-    speed: 1.9,
-    wobble: 0
+    x: canvas.width/2,
+    y: canvas.height/2,
+    vx: 0,
+    vy: 0,
+    size: 78,
+    speed: 2.3,
+    hp: 100,
+    alive: true,
+    rage: 0,
+    dance: 0
 };
 
 // ---------- RUNNERS ----------
-const names = ["leif", "lennard", "erim"];
+const names = ["leif","lennard","erim"];
 
-const runners = names.map(name => createRunner(name));
-
-function createRunner(name) {
-    return {
-        name,
-        x: rand(100, canvas.width - 100),
-        y: rand(100, canvas.height - 100),
-        vx: rand(-1, 1),
-        vy: rand(-1, 1),
-        size: 42,
-        speed: rand(2.2, 3.2),
-        alive: true,
-        immunity: 0,
-        respawnTimer: 0,
-        personality: rand(0.8, 1.2),
-        panic: 0
-    };
-}
+const runners = names.map(name => ({
+    name,
+    x: rand(150,canvas.width-150),
+    y: rand(150,canvas.height-150),
+    vx: 0,
+    vy: 0,
+    size: 42,
+    speed: rand(3.1,4.1),
+    hp: 40,
+    alive: true,
+    immunity: 2000,
+    respawn: 0,
+    dance: 0,
+    attackCooldown: 0,
+    personality: rand(0.8,1.2)
+}));
 
 // ---------- PARTICLES ----------
 const particles = [];
 
-function spawnParticles(x, y, color, amount=15) {
-    for(let i = 0; i < amount; i++) {
+function burst(x,y,color,count=20){
+    for(let i=0;i<count;i++){
         particles.push({
-            x,
-            y,
-            vx: rand(-4,4),
-            vy: rand(-4,4),
-            life: rand(20,40),
-            color,
-            size: rand(2,5)
+            x,y,
+            vx: rand(-5,5),
+            vy: rand(-5,5),
+            life: rand(20,50),
+            size: rand(2,6),
+            color
         });
     }
 }
 
-// ---------- GAME LOOP ----------
-let last = performance.now();
+// ---------- POWERUPS ----------
+const powerups = [];
 
-function update(dt) {
-    robin.wobble += dt * 0.002;
+function spawnPowerup(){
+    const types = ["speed","heal","damage"];
+    const type = types[Math.floor(Math.random()*types.length)];
 
-    // Find nearest alive runner
-    let nearest = null;
-    let nearestDist = Infinity;
+    powerups.push({
+        type,
+        x: rand(100,canvas.width-100),
+        y: rand(100,canvas.height-100),
+        pulse: rand(0,999)
+    });
+}
 
-    for (const r of runners) {
-        if (!r.alive || r.immunity > 0) continue;
+setInterval(() => {
+    if(powerups.length < 7){
+        spawnPowerup();
+    }
+}, 1300);
 
-        const d = dist(robin, r);
-        if (d < nearestDist) {
-            nearestDist = d;
-            nearest = r;
+// ---------- AI HELPERS ----------
+function nearestPowerup(entity){
+    let best = null;
+    let bestD = Infinity;
+
+    for(const p of powerups){
+        const d = dist(entity,p);
+        if(d < bestD){
+            bestD = d;
+            best = p;
         }
     }
 
-    // Robin chases nearest
-    if (nearest) {
-        const dx = nearest.x - robin.x;
-        const dy = nearest.y - robin.y;
-        const len = Math.hypot(dx, dy);
+    return best;
+}
 
-        robin.x += (dx / len) * robin.speed;
-        robin.y += (dy / len) * robin.speed;
-    } else {
-        // idle drift
-        robin.x += Math.sin(robin.wobble) * 0.5;
-        robin.y += Math.cos(robin.wobble * 0.7) * 0.5;
+// Smarter movement field
+function computeEscapeVector(r){
+
+    let vx = 0;
+    let vy = 0;
+
+    // flee robin
+    let dx = r.x - robin.x;
+    let dy = r.y - robin.y;
+
+    let d = Math.hypot(dx,dy) || 1;
+
+    vx += (dx/d) * 4.5;
+    vy += (dy/d) * 4.5;
+
+    // avoid corners/walls strongly
+    const margin = 180;
+
+    if(r.x < margin) vx += (margin-r.x)*0.035;
+    if(r.x > canvas.width-margin) vx -= (r.x-(canvas.width-margin))*0.035;
+
+    if(r.y < margin) vy += (margin-r.y)*0.035;
+    if(r.y > canvas.height-margin) vy -= (r.y-(canvas.height-margin))*0.035;
+
+    // orbit robin slightly so they don't pin themselves
+    vx += -dy/d * 1.6;
+    vy += dx/d * 1.6;
+
+    // seek useful powerups
+    const p = nearestPowerup(r);
+
+    if(p){
+        const pd = dist(r,p);
+
+        if(pd < 340){
+            const nx = (p.x-r.x)/pd;
+            const ny = (p.y-r.y)/pd;
+
+            vx += nx * 2.8;
+            vy += ny * 2.8;
+        }
     }
 
-    // Keep robin in arena
-    robin.x = Math.max(robin.size/2, Math.min(canvas.width - robin.size/2, robin.x));
-    robin.y = Math.max(robin.size/2, Math.min(canvas.height - robin.size/2, robin.y));
+    return normalize(vx,vy);
+}
 
-    for (const r of runners) {
+// ---------- GAME ----------
+let last = performance.now();
 
-        if (!r.alive) {
-            r.respawnTimer -= dt;
+function update(dt){
 
-            if (r.respawnTimer <= 0) {
+    // ---------- ROBIN AI ----------
+    if(robin.alive){
+
+        let target = null;
+        let score = Infinity;
+
+        for(const r of runners){
+
+            if(!r.alive) continue;
+
+            let s = dist(robin,r);
+
+            // weakened runners are prioritized
+            s -= (40-r.hp)*3;
+
+            if(s < score){
+                score = s;
+                target = r;
+            }
+        }
+
+        // Robin may prioritize powerups if weak
+        const nearPower = nearestPowerup(robin);
+
+        let tx,ty;
+
+        if(robin.hp < 40 && nearPower){
+            tx = nearPower.x;
+            ty = nearPower.y;
+        } else if(target){
+            tx = target.x;
+            ty = target.y;
+        }
+
+        if(tx !== undefined){
+
+            const n = normalize(tx-robin.x, ty-robin.y);
+
+            robin.vx += n.x * 0.12;
+            robin.vy += n.y * 0.12;
+        }
+
+        robin.vx *= 0.96;
+        robin.vy *= 0.96;
+
+        robin.x += robin.vx * robin.speed;
+        robin.y += robin.vy * robin.speed;
+
+        robin.x = clamp(robin.x,arenaPadding,canvas.width-arenaPadding);
+        robin.y = clamp(robin.y,arenaPadding,canvas.height-arenaPadding);
+    }
+
+    // ---------- RUNNERS ----------
+    for(const r of runners){
+
+        if(!r.alive){
+
+            r.respawn -= dt;
+
+            if(r.respawn <= 0 && robin.alive){
                 r.alive = true;
-                r.immunity = 3000;
+                r.hp = 40;
+                r.immunity = 2200;
 
-                r.x = rand(100, canvas.width - 100);
-                r.y = rand(100, canvas.height - 100);
+                r.x = rand(120,canvas.width-120);
+                r.y = rand(120,canvas.height-120);
 
-                spawnParticles(r.x, r.y, "#66ffcc", 25);
+                burst(r.x,r.y,"#66ffcc",30);
             }
 
             continue;
         }
 
-        if (r.immunity > 0) {
-            r.immunity -= dt;
+        if(r.immunity > 0) r.immunity -= dt;
+
+        if(r.attackCooldown > 0) r.attackCooldown -= dt;
+
+        // Victory dancing
+        if(!robin.alive){
+            r.dance += dt * 0.01;
+
+            r.x += Math.sin(r.dance) * 3;
+            r.y += Math.cos(r.dance*2) * 3;
+
+            continue;
         }
 
-        // AI movement
-        const dx = r.x - robin.x;
-        const dy = r.y - robin.y;
-        const d = Math.hypot(dx, dy);
+        const escape = computeEscapeVector(r);
 
-        // Panic mode when robin gets close
-        r.panic = Math.max(0, 1 - d / 300);
+        r.vx += escape.x * 0.18 * r.personality;
+        r.vy += escape.y * 0.18 * r.personality;
 
-        const fleeStrength = r.speed + r.panic * 2.5;
+        // random intelligence wobble
+        r.vx += rand(-0.03,0.03);
+        r.vy += rand(-0.03,0.03);
 
-        r.vx += (dx / d) * 0.12 * fleeStrength * r.personality;
-        r.vy += (dy / d) * 0.12 * fleeStrength * r.personality;
+        r.vx *= 0.95;
+        r.vy *= 0.95;
 
-        // random wandering
-        r.vx += rand(-0.05, 0.05);
-        r.vy += rand(-0.05, 0.05);
+        r.x += r.vx * r.speed;
+        r.y += r.vy * r.speed;
 
-        // damping
-        r.vx *= 0.96;
-        r.vy *= 0.96;
+        r.x = clamp(r.x,25,canvas.width-25);
+        r.y = clamp(r.y,25,canvas.height-25);
 
-        r.x += r.vx;
-        r.y += r.vy;
+        // Robin catches
+        if(robin.alive && r.immunity <= 0){
 
-        // wall bouncing
-        if (r.x < 20 || r.x > canvas.width - 20) r.vx *= -1;
-        if (r.y < 20 || r.y > canvas.height - 20) r.vy *= -1;
+            if(dist(r,robin) < robin.size*0.42 + r.size*0.35){
 
-        r.x = Math.max(20, Math.min(canvas.width - 20, r.x));
-        r.y = Math.max(20, Math.min(canvas.height - 20, r.y));
+                r.hp -= 18;
 
-        // Catch check
-        if (r.immunity <= 0 && dist(robin, r) < robin.size * 0.45 + r.size * 0.4) {
+                burst(r.x,r.y,"#ff4444",20);
 
-            r.alive = false;
-            r.respawnTimer = rand(2500, 5000);
+                r.vx += (r.x-robin.x)*0.08;
+                r.vy += (r.y-robin.y)*0.08;
 
-            robin.size += 7;
-            robin.speed += 0.04;
+                robin.size += 3;
+                robin.hp = Math.min(140, robin.hp + 6);
 
-            spawnParticles(r.x, r.y, "#ff5555", 35);
+                if(r.hp <= 0){
+
+                    r.alive = false;
+                    r.respawn = rand(2500,5000);
+
+                    robin.size += 9;
+
+                    burst(r.x,r.y,"#ff2222",40);
+                }
+            }
+        }
+
+        // Runner attacks Robin
+        if(robin.alive && r.attackCooldown <= 0){
+
+            const d = dist(r,robin);
+
+            if(d < 115){
+
+                robin.hp -= 0.45;
+
+                r.attackCooldown = 60;
+
+                burst(robin.x,robin.y,"#ffee55",3);
+
+                robin.vx += (robin.x-r.x)*0.02;
+                robin.vy += (robin.y-r.y)*0.02;
+            }
         }
     }
 
-    // Robin slowly shrinks again
-    robin.size *= 0.9997;
-    robin.size = Math.max(robin.size, 70);
+    // ---------- POWERUPS ----------
+    for(let i=powerups.length-1;i>=0;i--){
+
+        const p = powerups[i];
+        p.pulse += dt*0.005;
+
+        // Robin pickup
+        if(robin.alive && dist(robin,p) < robin.size*0.4 + 20){
+
+            applyPowerup(robin,p.type,true);
+
+            burst(p.x,p.y,"#ffcc00",25);
+
+            powerups.splice(i,1);
+            continue;
+        }
+
+        // Runner pickup
+        let eaten = false;
+
+        for(const r of runners){
+
+            if(!r.alive) continue;
+
+            if(dist(r,p) < 30){
+
+                applyPowerup(r,p.type,false);
+
+                burst(p.x,p.y,"#66ccff",20);
+
+                powerups.splice(i,1);
+                eaten = true;
+                break;
+            }
+        }
+
+        if(eaten) continue;
+    }
+
+    // Robin death
+    if(robin.hp <= 0 && robin.alive){
+
+        robin.alive = false;
+
+        burst(robin.x,robin.y,"#ffffff",120);
+
+        for(const r of runners){
+            if(r.alive){
+                r.dance = rand(0,100);
+            }
+        }
+    }
 
     // particles
-    for (let i = particles.length - 1; i >= 0; i--) {
+    for(let i=particles.length-1;i>=0;i--){
+
         const p = particles[i];
 
         p.x += p.vx;
@@ -242,109 +439,198 @@ function update(dt) {
 
         p.life--;
 
-        if (p.life <= 0) {
-            particles.splice(i, 1);
+        if(p.life <= 0){
+            particles.splice(i,1);
         }
     }
 }
 
-function drawArena() {
-    // animated grid
+function applyPowerup(entity,type,isRobin){
+
+    switch(type){
+
+        case "speed":
+            entity.speed += isRobin ? 0.3 : 0.22;
+            break;
+
+        case "heal":
+            entity.hp += isRobin ? 20 : 12;
+            break;
+
+        case "damage":
+            if(isRobin){
+                robin.size += 10;
+            } else {
+                robin.hp -= 10;
+            }
+            break;
+    }
+}
+
+// ---------- DRAW ----------
+function drawArena(){
+
+    const t = performance.now()*0.02;
+
     ctx.strokeStyle = "rgba(255,255,255,0.04)";
     ctx.lineWidth = 1;
 
-    const offset = performance.now() * 0.01;
-
-    for(let x = -50; x < canvas.width + 50; x += 50) {
+    for(let x=-50;x<canvas.width+50;x+=50){
         ctx.beginPath();
-        ctx.moveTo(x + (offset % 50), 0);
-        ctx.lineTo(x + (offset % 50), canvas.height);
+        ctx.moveTo(x+(t%50),0);
+        ctx.lineTo(x+(t%50),canvas.height);
         ctx.stroke();
     }
 
-    for(let y = -50; y < canvas.height + 50; y += 50) {
+    for(let y=-50;y<canvas.height+50;y+=50){
         ctx.beginPath();
-        ctx.moveTo(0, y + (offset % 50));
-        ctx.lineTo(canvas.width, y + (offset % 50));
+        ctx.moveTo(0,y+(t%50));
+        ctx.lineTo(canvas.width,y+(t%50));
         ctx.stroke();
     }
 }
 
-function drawCharacter(img, x, y, size, glow, alpha=1) {
+function drawImage(img,x,y,size,glow,alpha=1,rotation=0){
+
     ctx.save();
+
+    ctx.translate(x,y);
+    ctx.rotate(rotation);
 
     ctx.globalAlpha = alpha;
 
     ctx.shadowColor = glow;
-    ctx.shadowBlur = 25;
+    ctx.shadowBlur = 28;
 
-    ctx.drawImage(img, x - size/2, y - size/2, size, size);
+    ctx.drawImage(img,-size/2,-size/2,size,size);
 
     ctx.restore();
 }
 
-function render() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+function render(){
+
+    ctx.clearRect(0,0,canvas.width,canvas.height);
 
     drawArena();
 
+    // powerups
+    for(const p of powerups){
+
+        const pulse = Math.sin(p.pulse)*6;
+
+        let color = "#66ccff";
+
+        if(p.type==="heal") color = "#66ff99";
+        if(p.type==="damage") color = "#ff6666";
+
+        ctx.beginPath();
+        ctx.fillStyle = color;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 25;
+        ctx.arc(p.x,p.y,12+pulse*0.2,0,Math.PI*2);
+        ctx.fill();
+    }
+
     // particles
-    for (const p of particles) {
-        ctx.globalAlpha = p.life / 40;
+    for(const p of particles){
+
+        ctx.globalAlpha = p.life/50;
 
         ctx.fillStyle = p.color;
+
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
         ctx.fill();
     }
 
     ctx.globalAlpha = 1;
 
     // Robin
-    const pulse = Math.sin(robin.wobble * 4) * 4;
+    if(robin.alive){
 
-    drawCharacter(
-        images.robin,
-        robin.x,
-        robin.y,
-        robin.size + pulse,
-        "#ff4444"
-    );
+        drawImage(
+            imgs.robin,
+            robin.x,
+            robin.y,
+            robin.size + Math.sin(performance.now()*0.008)*4,
+            "#ff4444"
+        );
 
-    // Runners
-    for (const r of runners) {
+        // hp bar
+        ctx.fillStyle = "#000";
+        ctx.fillRect(robin.x-45, robin.y-robin.size/2-20, 90, 8);
 
-        if (!r.alive) continue;
+        ctx.fillStyle = "#ff5555";
+        ctx.fillRect(robin.x-45, robin.y-robin.size/2-20, robin.hp*0.9, 8);
+
+    } else {
+
+        drawImage(
+            imgs.robin,
+            robin.x,
+            robin.y,
+            robin.size,
+            "#ffffff",
+            0.25,
+            performance.now()*0.002
+        );
+
+        ctx.fillStyle = "white";
+        ctx.font = "bold 42px Arial";
+        ctx.fillText("ROBIN DEFEATED", canvas.width/2-180, 80);
+    }
+
+    // runners
+    for(const r of runners){
+
+        if(!r.alive) continue;
 
         let alpha = 1;
 
-        if (r.immunity > 0) {
-            alpha = 0.45 + Math.sin(performance.now() * 0.02) * 0.25;
+        if(r.immunity > 0){
+            alpha = 0.5 + Math.sin(performance.now()*0.02)*0.3;
         }
 
-        drawCharacter(
-            images[r.name],
+        const spin = !robin.alive ? Math.sin(r.dance)*0.5 : 0;
+
+        drawImage(
+            imgs[r.name],
             r.x,
             r.y,
-            r.size + r.panic * 10,
-            r.immunity > 0 ? "#66ffcc" : "#66aaff",
-            alpha
+            r.size + (!robin.alive ? 8 : 0),
+            !robin.alive ? "#ffee55" : "#66aaff",
+            alpha,
+            spin
         );
 
-        // panic ring
-        if (r.panic > 0.25) {
-            ctx.strokeStyle = `rgba(255,80,80,${r.panic * 0.5})`;
-            ctx.lineWidth = 2;
+        // hp
+        ctx.fillStyle = "#000";
+        ctx.fillRect(r.x-20,r.y-r.size/2-12,40,5);
+
+        ctx.fillStyle = "#66ff99";
+        ctx.fillRect(r.x-20,r.y-r.size/2-12,r.hp,5);
+
+        // dance effects
+        if(!robin.alive){
+
+            ctx.strokeStyle = `hsla(${(performance.now()*0.1+r.x)%360},100%,70%,0.7)`;
 
             ctx.beginPath();
-            ctx.arc(r.x, r.y, r.size * (1.2 + r.panic), 0, Math.PI * 2);
+            ctx.arc(
+                r.x,
+                r.y,
+                30 + Math.sin(r.dance*4)*8,
+                0,
+                Math.PI*2
+            );
             ctx.stroke();
         }
     }
 }
 
-function loop(now) {
-    const dt = now - last;
+function loop(now){
+
+    const dt = now-last;
     last = now;
 
     update(dt);
@@ -354,7 +640,7 @@ function loop(now) {
 }
 
 requestAnimationFrame(loop);
-</script>
 
+</script>
 </body>
 </html>
