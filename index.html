@@ -72,24 +72,17 @@
         .setting-row label {
             font-size: 16px;
         }
-        .setting-row select {
+        .setting-row select, .setting-row button {
             background: rgba(255,255,255,0.1);
             color: white;
             border: 1px solid rgba(255,255,255,0.3);
-            padding: 5px 10px;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-        .setting-row button {
-            background: rgba(204,0,255,0.3);
-            border: 1px solid #cc00ff;
-            color: white;
-            padding: 6px 14px;
+            padding: 5px 14px;
             border-radius: 6px;
             cursor: pointer;
         }
         .setting-row button.active {
             background: #cc00ff;
+            border-color: #cc00ff;
         }
         #close-settings {
             align-self: center;
@@ -144,7 +137,11 @@
         let shakeIntensity = 0;
         const MAX_SHAKE = 18;
 
-        // Victory state
+        // Per‑player death counters & victories
+        let leifDeaths = 0, lennardDeaths = 0, erimDeaths = 0;
+        let robinVictories = 0, playerVictories = 0;
+
+        // Victory state (for Robin wiping all runners simultaneously)
         let robinVictory = false;
         let victoryTimer = 0;
         const VICTORY_DURATION = 4000;
@@ -218,7 +215,6 @@
         const projectiles = [];
         const powerups = [];
         const texts = [];
-        const minions = []; // Robin's summoned minions
 
         // ---------- ENTITIES ----------
         const robin = {
@@ -229,7 +225,7 @@
             alive: true,
             immunity: 0,
             facing: 0,
-            slashCd: 0, orbCd: 0, dashCd: 0, slamCd: 0, cometCd: 0, minionCd: 0,
+            slashCd: 0, orbCd: 0, dashCd: 0, slamCd: 0,
             shield: 0,
             speedBuff: 1, damageBuff: 1,
             slamTelegraph: null
@@ -241,7 +237,9 @@
                 x: 300, y: 300, vx: 0, vy: 0,
                 hp: 90, maxHp: 90, ghostHp: 90,
                 size: 44, alive: true, immunity: 2000,
-                healBombCd: 0, zapCd: 0, damageBuff: 1, speedBuff: 1, dance: 0
+                healBombCd: 0, zapCd: 0, novaCd: 0,
+                novaActive: false, novaTimer: 0, novaX: 0, novaY: 0,
+                damageBuff: 1, speedBuff: 1, dance: 0
             },
             {
                 name: "lennard", role: "sniper",
@@ -257,15 +255,16 @@
                 x: 700, y: 700, vx: 0, vy: 0,
                 hp: 115, maxHp: 115, ghostHp: 115,
                 size: 46, alive: true, immunity: 2000,
-                slashCd: 0, leapCd: 0, protectCd: 0, lastStandCd: 0,
+                slashCd: 0, leapCd: 0, protectCd: 0, lastStandCd: 0, furyCd: 0,
+                furyActive: false, furyTimer: 0,
                 damageBuff: 1, speedBuff: 1, dance: 0,
                 lastStandActive: false
             }
         ];
 
-        // ---------- POWERUPS ----------
+        // ---------- POWERUPS (only heal / speed) ----------
         function spawnPowerup() {
-            const types = ["heal", "speed", "damage", "shield"];
+            const types = ["heal", "speed"];
             let px, py;
             do {
                 px = rand(80, canvas.width - 80);
@@ -277,7 +276,7 @@
                 pulse: rand(0, 999)
             });
         }
-        for (let i = 0; i < 8; i++) spawnPowerup(); // more powerups
+        for (let i = 0; i < 6; i++) spawnPowerup(); // keep 6 powerups
 
         // ---------- COMBAT & EFFECTS ----------
         function burst(x, y, color, count = 18) {
@@ -325,7 +324,7 @@
             robin.immunity = 1500;
             robin.x = canvas.width / 2;
             robin.y = canvas.height / 2;
-            robin.slashCd = robin.orbCd = robin.dashCd = robin.slamCd = robin.cometCd = robin.minionCd = 0;
+            robin.slashCd = robin.orbCd = robin.dashCd = robin.slamCd = 0;
             robin.slamTelegraph = null;
             burst(robin.x, robin.y, "#cc00ff", 80);
             textPop(robin.x, robin.y - 40, "RESPAWNED!", "#cc00ff");
@@ -336,8 +335,9 @@
         function damage(target, amount, sourceX, sourceY) {
             if (!target.alive) return;
             if (target.immunity > 0) return;
+            if (target.invisible && target.role === "sniper") return; // Robin cannot hit invisible Lennard
             if (target.lastStandActive) {
-                amount *= 0.5; // 50% damage reduction during Last Stand
+                amount *= 0.5;
             }
             if (target.shield > 0) {
                 const absorbed = Math.min(target.shield, amount);
@@ -358,6 +358,7 @@
                 if (target === robin) {
                     if (infiniteMode) {
                         rDeaths++;
+                        playerVictories++;
                         respawnRobin();
                     } else {
                         robin.alive = false;
@@ -365,11 +366,16 @@
                         for (const r of runners) if (r.alive) r.dance = rand(0, 100);
                         addShake(15);
                         addChat("Robin DEFEATED!");
+                        playerVictories++;
                     }
                 } else {
                     target.alive = false;
-                    target.respawn = rand(10000, 15000); // longer window for Robin
+                    target.respawn = rand(8000, 13000);
                     pDeaths++;
+                    // Increment per‑player death
+                    if (target.name === "leif") leifDeaths++;
+                    if (target.name === "lennard") lennardDeaths++;
+                    if (target.name === "erim") erimDeaths++;
                     burst(target.x, target.y, "#ff2222", 45);
                     addChat(`${target.name.toUpperCase()} down!`);
                     if (target.lastStandActive) target.lastStandActive = false;
@@ -392,70 +398,14 @@
             });
         }
 
-        // ---------- MINION LOGIC ----------
-        function spawnMinion(x, y) {
-            minions.push({
-                x, y,
-                hp: 35, maxHp: 35,
-                size: 28,
-                vx: 0, vy: 0,
-                target: null,
-                attackCd: 0,
-                color: "#9966ff"
-            });
-        }
-
-        function updateMinions(dt) {
-            for (let i = minions.length - 1; i >= 0; i--) {
-                const m = minions[i];
-                if (m.hp <= 0) {
-                    burst(m.x, m.y, "#9966ff", 12);
-                    minions.splice(i, 1);
-                    continue;
-                }
-                // Find closest runner
-                let target = null, bestDist = Infinity;
-                for (const r of runners) {
-                    if (!r.alive) continue;
-                    const d = dist(m, r);
-                    if (d < bestDist) { bestDist = d; target = r; }
-                }
-                if (target) {
-                    const dx = target.x - m.x, dy = target.y - m.y;
-                    const d = Math.hypot(dx, dy);
-                    const n = norm(dx, dy);
-                    if (d > 40) {
-                        m.vx += n.x * 0.25;
-                        m.vy += n.y * 0.25;
-                    }
-                    m.vx *= 0.92;
-                    m.vy *= 0.92;
-                    m.x += m.vx;
-                    m.y += m.vy;
-                    m.x = clamp(m.x, 50, canvas.width - 50);
-                    m.y = clamp(m.y, 50, canvas.height - 50);
-
-                    if (d < 50 && m.attackCd <= 0) {
-                        m.attackCd = 700;
-                        damage(target, 8, m.x, m.y);
-                    }
-                }
-                m.attackCd -= dt;
-                // Minions take damage from player projectiles (handled in projectile update)
-            }
-        }
-
-        // ---------- ROBIN AI (single phase, smarter) ----------
+        // ---------- ROBIN AI (single phase, smarter, no comets/minions) ----------
         function updateRobin(dt) {
             if (!robin.alive) return;
             robin.immunity -= dt;
-            const cdMultiplier = 1.0;
-            robin.slashCd -= dt * cdMultiplier;
-            robin.orbCd -= dt * cdMultiplier;
-            robin.dashCd -= dt * cdMultiplier;
-            robin.slamCd -= dt * cdMultiplier;
-            robin.cometCd -= dt * cdMultiplier;
-            robin.minionCd -= dt * cdMultiplier;
+            robin.slashCd -= dt;
+            robin.orbCd -= dt;
+            robin.dashCd -= dt;
+            robin.slamCd -= dt;
 
             // Slam telegraph
             if (robin.slamTelegraph) {
@@ -463,7 +413,7 @@
                 if (robin.slamTelegraph.remaining <= 0) {
                     const cx = robin.slamTelegraph.x, cy = robin.slamTelegraph.y;
                     for (const r of runners) {
-                        if (!r.alive) continue;
+                        if (!r.alive || r.invisible) continue;
                         if (dist({ x: cx, y: cy }, r) < 160) damage(r, 28, cx, cy);
                     }
                     burst(cx, cy, "#ff4444", 50);
@@ -473,9 +423,10 @@
                 }
             }
 
+            // Find nearest visible runner
             let target = null, bestDist = Infinity;
             for (const r of runners) {
-                if (!r.alive) continue;
+                if (!r.alive || r.invisible) continue;
                 const d = dist(robin, r);
                 if (d < bestDist) { bestDist = d; target = r; }
             }
@@ -486,11 +437,9 @@
             const n = norm(dx, dy);
             robin.facing = Math.atan2(dy, dx);
 
-            // Intelligent movement: prefer not to be surrounded, slightly kite if multiple close
             let moveX = n.x, moveY = n.y;
-            const closeRunners = runners.filter(r => r.alive && dist(robin, r) < 200);
+            const closeRunners = runners.filter(r => r.alive && !r.invisible && dist(robin, r) < 200);
             if (closeRunners.length >= 2) {
-                // Move away from center of group
                 let cx = 0, cy = 0;
                 for (const r of closeRunners) { cx += r.x; cy += r.y; }
                 cx /= closeRunners.length; cy /= closeRunners.length;
@@ -499,7 +448,6 @@
                 moveY += away.y * 0.7;
             }
 
-            // Powerup seeking
             if (robin.hp < robin.maxHp * 0.5) {
                 const healP = getNearestPowerup(robin, "heal", 300);
                 if (healP) {
@@ -519,7 +467,7 @@
             robin.x = clamp(robin.x, 100, canvas.width - 100);
             robin.y = clamp(robin.y, 100, canvas.height - 100);
 
-            // Abilities with cooldowns
+            // Abilities
             if (d < 100 && robin.slashCd <= 0) {
                 robin.slashCd = 650;
                 damage(target, 18, robin.x, robin.y);
@@ -543,22 +491,6 @@
                 addShake(6);
             }
 
-            // New: Slow Comet (big, slow, dodgeable)
-            if (d > 200 && robin.cometCd <= 0) {
-                robin.cometCd = 7000;
-                const angle = robin.facing + rand(-0.2, 0.2);
-                shoot(robin, robin.x, robin.y, angle, 3.2, 45, "#ffaa00", 16, "comet", { isComet: true });
-                addChat("Robin COMET");
-            }
-
-            // New: Spawn minions
-            if (closeRunners.length >= 1 && robin.minionCd <= 0 && minions.length < 4) {
-                robin.minionCd = 12000;
-                spawnMinion(robin.x + rand(-40, 40), robin.y + rand(-40, 40));
-                spawnMinion(robin.x + rand(-40, 40), robin.y + rand(-40, 40));
-                addChat("Robin SPAWNED MINIONS");
-            }
-
             if (d < 160 && robin.slamCd <= 0 && !robin.slamTelegraph) {
                 robin.slamCd = 8500;
                 robin.slamTelegraph = { remaining: 950, total: 950, x: robin.x, y: robin.y };
@@ -566,7 +498,7 @@
             }
         }
 
-        // ---------- RUNNER AI (smarter synergy) ----------
+        // ---------- RUNNER AI (enhanced with new abilities) ----------
         function updateRunner(r, dt) {
             if (!r.alive) {
                 r.respawn -= dt;
@@ -596,17 +528,51 @@
 
             const sniper = runners.find(b => b.role === "sniper");
             const support = runners.find(b => b.role === "support");
-            const sniperInDanger = sniper && sniper.alive && sniper.hp < sniper.maxHp * 0.5;
+            const sniperInDanger = sniper && sniper.alive && !sniper.invisible && sniper.hp < sniper.maxHp * 0.5;
             const selfLow = r.hp < r.maxHp * 0.4;
 
             let moveX = 0, moveY = 0;
 
-            // ---------- SUPPORT ----------
+            // ---------- SUPPORT (Leif) ----------
             if (r.role === "support") {
                 r.healBombCd -= dt;
                 r.zapCd -= dt;
+                r.novaCd -= dt;
 
-                // Heal allies if low
+                // Healing Nova
+                if (r.novaActive) {
+                    r.novaTimer -= dt;
+                    // Heal allies and self inside radius
+                    const healRadius = 130;
+                    for (const ally of runners) {
+                        if (!ally.alive || ally.invisible) continue;
+                        if (dist(r, ally) < healRadius) heal(ally, 2);
+                    }
+                    heal(r, 2);
+                    // Epic green pulses
+                    if (Math.random() < 0.4) {
+                        burst(r.x + rand(-30,30), r.y + rand(-30,30), "#88ff88", 3);
+                    }
+                    if (r.novaTimer <= 0) {
+                        r.novaActive = false;
+                        r.novaCd = 18000;
+                        burst(r.x, r.y, "#88ff88", 40);
+                        addChat("Leif NOVA faded");
+                    }
+                } else {
+                    // Activate Nova when multiple allies low or self low
+                    const lowAllies = runners.filter(a => a.alive && a !== r && a.hp < a.maxHp * 0.5);
+                    if ((lowAllies.length >= 2 || (selfLow && lowAllies.length >= 1)) && r.novaCd <= 0) {
+                        r.novaActive = true;
+                        r.novaTimer = 3500;
+                        r.novaCd = 18000; // start cooldown after activation
+                        burst(r.x, r.y, "#88ff88", 50);
+                        addChat("Leif HEALING NOVA!");
+                        textPop(r.x, r.y - 40, "HEALING NOVA", "#88ff88");
+                    }
+                }
+
+                // Heal bomb
                 const allies = runners.filter(a => a.alive && a !== r && a.hp < a.maxHp * 0.6);
                 if (allies.length > 0 && r.healBombCd <= 0) {
                     const closestLow = allies.reduce((a, b) => dist(r, a) < dist(r, b) ? a : b);
@@ -625,23 +591,51 @@
                     shoot(r, r.x, r.y, Math.atan2(dy, dx) + rand(-0.1, 0.1), 7.5, 7, "#ffd166", 5);
                 }
             }
-            // ---------- BERSERKER (Last Stand, protect) ----------
+            // ---------- BERSERKER (Erim) ----------
             else if (r.role === "berserker") {
                 r.slashCd -= dt;
                 r.leapCd -= dt;
                 r.protectCd -= dt;
                 r.lastStandCd -= dt;
+                r.furyCd -= dt;
 
-                // Last Stand: activate when low HP and not on cooldown
+                // Battle Fury ability
+                if (r.furyActive) {
+                    r.furyTimer -= dt;
+                    // damageBuff and speedBuff already applied, maintain visual
+                    if (Math.random() < 0.5) burst(r.x + rand(-20,20), r.y + rand(-20,20), "#ff5500", 2);
+                    if (r.furyTimer <= 0) {
+                        r.furyActive = false;
+                        r.damageBuff = Math.max(1, r.damageBuff - 0.4);
+                        r.speedBuff = Math.max(1, r.speedBuff - 0.3);
+                        r.furyCd = 22000;
+                        addChat("Erim fury ended");
+                    }
+                } else {
+                    // Activate Fury when low health or near low allies
+                    const shouldFury = (selfLow && d < 180) || (sniperInDanger && d < 180);
+                    if (shouldFury && r.furyCd <= 0) {
+                        r.furyActive = true;
+                        r.furyTimer = 6000;
+                        r.damageBuff += 0.4;
+                        r.speedBuff += 0.3;
+                        r.furyCd = 22000;
+                        burst(r.x, r.y, "#ff5500", 50);
+                        textPop(r.x, r.y - 30, "BATTLE FURY!", "#ff5500");
+                        addChat("Erim BATTLE FURY");
+                    }
+                }
+
+                // Last Stand
                 if (selfLow && r.lastStandCd <= 0 && !r.lastStandActive) {
                     r.lastStandActive = true;
                     r.lastStandCd = 25000;
                     textPop(r.x, r.y - 40, "LAST STAND!", "#ffaa00");
                     addChat("Erim enters LAST STAND");
-                    setTimeout(() => { r.lastStandActive = false; }, 5000);
+                    setTimeout(() => { if (r.alive) r.lastStandActive = false; }, 5000);
                 }
 
-                // Protect sniper if in danger and nearby
+                // Protect sniper
                 if (sniperInDanger && r.protectCd <= 0 && dist(r, sniper) < 220) {
                     sniper.shield = Math.min(40, sniper.shield + 30);
                     r.protectCd = 11000;
@@ -650,7 +644,6 @@
                 }
 
                 if (selfLow) {
-                    // Retreat toward support or powerup
                     const healP = getNearestPowerup(r, "heal", 300);
                     if (healP) {
                         const pn = norm(healP.x - r.x, healP.y - r.y);
@@ -671,18 +664,18 @@
 
                 if (d < 95 && r.slashCd <= 0) {
                     r.slashCd = 700;
-                    damage(robin, 12, r.x, r.y);
+                    damage(robin, 12 * r.damageBuff, r.x, r.y);
                 }
                 if (d > 120 && d < 290 && r.leapCd <= 0 && !selfLow) {
                     r.leapCd = 4500;
                     r.vx += n.x * 8;
                     r.vy += n.y * 8;
-                    damage(robin, 23, r.x, r.y);
+                    damage(robin, 23 * r.damageBuff, r.x, r.y);
                     burst(r.x, r.y, "#ffee55", 18);
                     addChat("Erim LEAP");
                 }
             }
-            // ---------- SNIPER (Vanish / Blink) ----------
+            // ---------- SNIPER (Lennard) ----------
             else if (r.role === "sniper") {
                 r.snipeCd -= dt;
                 r.panicShotCd -= dt;
@@ -690,15 +683,13 @@
                 r.vanishCd -= dt;
                 r.blinkCd -= dt;
 
-                // Vanish when Robin is close and not on cooldown
                 if (d < 150 && r.vanishCd <= 0 && !r.invisible) {
                     r.invisible = true;
                     r.invisTimer = 2800;
                     r.vanishCd = 14000;
                     addChat("Lennard VANISHED");
-                    textPop(r.x, r.y - 30, "VANISH", "#aaaaff");
+                    textPop(r.x, r.y - 30, "VANISH!", "#aaaaff");
                 }
-                // Blink away if in danger and vanish on cooldown
                 if (d < 130 && r.blinkCd <= 0 && !r.invisible) {
                     r.blinkCd = 11000;
                     const angle = Math.atan2(r.y - robin.y, r.x - robin.x) + rand(-0.5, 0.5);
@@ -710,10 +701,10 @@
                     addChat("Lennard BLINKED");
                 }
 
-                if (sniperInDanger || selfLow) {
+                if ((sniperInDanger || selfLow) && !r.invisible) {
                     moveX -= n.x * 1.9;
                     moveY -= n.y * 1.9;
-                } else if (d < 320) {
+                } else if (d < 320 && !r.invisible) {
                     moveX -= n.x * 1.3;
                     moveY -= n.y * 1.3;
                 }
@@ -721,11 +712,11 @@
 
                 if (d > 190 && r.snipeCd <= 0) {
                     r.snipeCd = 600;
-                    shoot(r, r.x, r.y, Math.atan2(dy, dx), 10.5, 9, "#66ccff", 4);
+                    shoot(r, r.x, r.y, Math.atan2(dy, dx), 10.5, 9 * r.damageBuff, "#66ccff", 4);
                 }
                 if (d < 130 && r.panicShotCd <= 0) {
                     r.panicShotCd = 3500;
-                    shoot(r, r.x, r.y, Math.atan2(dy, dx), 15, 35, "#ffee55", 9, "rail");
+                    shoot(r, r.x, r.y, Math.atan2(dy, dx), 15, 35 * r.damageBuff, "#ffee55", 9, "rail");
                     r.vx -= n.x * 10; r.vy -= n.y * 10;
                     burst(r.x, r.y, "#ffee55", 25);
                     addChat("Lennard PANIC SHOT");
@@ -743,7 +734,7 @@
             if (r.y < margin) moveY += 1.2;
             if (r.y > canvas.height - margin) moveY -= 1.2;
 
-            // Powerup seeking
+            // Powerup seeking (only heal/speed exist now)
             let pTarget = null;
             if (r.hp < r.maxHp * 0.6) pTarget = getNearestPowerup(r, "heal");
             if (!pTarget && !selfLow) pTarget = getNearestPowerup(r, null, 260);
@@ -770,7 +761,7 @@
             }
         }
 
-        // ---------- PROJECTILES (updated for minion damage) ----------
+        // ---------- PROJECTILES (no comet, no minions) ----------
         function updateProjectiles(dt) {
             for (let i = projectiles.length - 1; i >= 0; i--) {
                 const p = projectiles[i];
@@ -789,38 +780,23 @@
                     continue;
                 }
 
-                // Comet explosion (large AoE when hitting edge or expiring)
-                if (p.isComet && (p.life <= 0 || p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height)) {
-                    burst(p.x, p.y, "#ffaa00", 25);
-                    for (const r of runners) {
-                        if (!r.alive) continue;
-                        if (dist(p, r) < 100) damage(r, p.damage, p.x, p.y);
-                    }
+                // Out of bounds cleanup
+                if (p.x < -50 || p.x > canvas.width + 50 || p.y < -50 || p.y > canvas.height + 50) {
                     projectiles.splice(i, 1);
                     continue;
                 }
 
-                // Minion collision with projectiles (only player projectiles damage minions)
-                if (p.owner !== robin) {
-                    for (let m of minions) {
-                        if (dist(p, m) < m.size * 0.5) {
-                            m.hp -= p.damage;
-                            projectiles.splice(i, 1);
-                            burst(p.x, p.y, p.color, 4);
-                            break;
-                        }
-                    }
-                }
-
+                // Player projectiles hitting Robin
                 if (p.owner !== robin && robin.alive && dist(p, robin) < robin.size * 0.45) {
                     damage(robin, p.damage, p.x, p.y);
                     projectiles.splice(i, 1);
                     continue;
                 }
 
+                // Robin projectiles hitting visible runners
                 if (p.owner === robin) {
                     for (const r of runners) {
-                        if (!r.alive) continue;
+                        if (!r.alive || r.invisible) continue;
                         if (dist(p, r) < r.size * 0.45) {
                             damage(r, p.damage, p.x, p.y);
                             projectiles.splice(i, 1);
@@ -858,23 +834,14 @@
         }
 
         function applyPowerup(entity, type) {
-            switch (type) {
-                case "heal": heal(entity, entity.maxHp * 0.3); break;
-                case "speed":
-                    entity.speedBuff = 1.4;
-                    setTimeout(() => { entity.speedBuff = 1; }, 7000);
-                    textPop(entity.x, entity.y, "SPD", "#66ccff");
-                    break;
-                case "damage":
-                    entity.damageBuff = 1.5;
-                    setTimeout(() => { entity.damageBuff = 1; }, 7000);
-                    textPop(entity.x, entity.y, "DMG", "#ff6666");
-                    break;
-                case "shield":
-                    entity.shield = Math.min(40, entity.shield + 25);
-                    textPop(entity.x, entity.y, "SHIELD", "#bb66ff");
-                    break;
+            if (type === "heal") {
+                heal(entity, entity.maxHp * 0.3);
+            } else if (type === "speed") {
+                entity.speedBuff = 1.4;
+                setTimeout(() => { entity.speedBuff = 1; }, 7000);
+                textPop(entity.x, entity.y, "SPD", "#66ccff");
             }
+            // damage and shield powerups removed
         }
 
         function updateParticles(dt) {
@@ -904,6 +871,7 @@
             if (runners.every(r => !r.alive)) {
                 robinVictory = true;
                 victoryTimer = VICTORY_DURATION;
+                robinVictories++;
                 addShake(22);
                 addChat("Robin WINS!");
                 burst(robin.x, robin.y, "#cc00ff", 150);
@@ -930,7 +898,6 @@
                 robin.ghostHp = robin.maxHp;
             }
             burst(robin.x, robin.y, "#ffffff", 60);
-            minions.length = 0;
         }
 
         // ---------- RENDERING ----------
@@ -990,8 +957,23 @@
             ctx.fillRect(entity.x - 25, entity.y - entity.size / 2 - 16, 50 * (entity.hp / entity.maxHp), 6);
         }
 
+        function drawStats() {
+            if (!infiniteMode) return;
+            ctx.fillStyle = "rgba(0,0,0,0.6)";
+            ctx.fillRect(canvas.width/2 - 180, 10, 360, 80);
+            ctx.strokeStyle = "rgba(255,255,255,0.2)";
+            ctx.strokeRect(canvas.width/2 - 180, 10, 360, 80);
+            ctx.fillStyle = "white";
+            ctx.font = "bold 14px monospace";
+            ctx.textAlign = "center";
+            ctx.fillText(`Robin Deaths: ${rDeaths}   Player Victories: ${playerVictories}`, canvas.width/2, 32);
+            ctx.fillText(`Leif: ${leifDeaths}   Lennard: ${lennardDeaths}   Erim: ${erimDeaths}`, canvas.width/2, 56);
+            ctx.fillText(`Robin Victories: ${robinVictories}`, canvas.width/2, 76);
+            ctx.textAlign = "left";
+        }
+
         function drawChat() {
-            const startY = 25;
+            const startY = 30;
             for (let i = 0; i < chatMessages.length; i++) {
                 const msg = chatMessages[i];
                 const alpha = Math.min(1, msg.life / 1500);
@@ -1016,12 +998,11 @@
 
             drawArena();
 
-            // Powerups
+            // Powerups (only heal & speed)
             for (const p of powerups) {
                 let color = "#66ccff";
                 if (p.type === "heal") color = "#66ff99";
-                if (p.type === "damage") color = "#ff6666";
-                if (p.type === "shield") color = "#bb66ff";
+                if (p.type === "speed") color = "#66ccff";
                 ctx.beginPath();
                 ctx.fillStyle = color;
                 ctx.shadowColor = color;
@@ -1048,19 +1029,6 @@
                 ctx.shadowBlur = 16;
                 ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
                 ctx.fill();
-            }
-
-            // Minions
-            for (const m of minions) {
-                ctx.fillStyle = "#9966ff";
-                ctx.shadowColor = "#9966ff";
-                ctx.shadowBlur = 15;
-                ctx.beginPath();
-                ctx.arc(m.x, m.y, m.size/2, 0, Math.PI*2);
-                ctx.fill();
-                ctx.fillStyle = "white";
-                ctx.font = "10px Arial";
-                ctx.fillText(Math.ceil(m.hp), m.x-10, m.y-20);
             }
 
             // Slam telegraph
@@ -1092,8 +1060,7 @@
 
             // Runners
             for (const r of runners) {
-                if (!r.alive) continue;
-                if (r.invisible) continue; // invisible
+                if (!r.alive || r.invisible) continue; // invisible runners not drawn
                 let glow = "#66aaff";
                 if (r.role === "berserker") glow = "#66ff99";
                 if (r.role === "sniper") glow = "#66ccff";
@@ -1117,6 +1084,19 @@
                 }
             }
 
+            // Nova visual (healing aura)
+            for (const r of runners) {
+                if (r.role === "support" && r.novaActive) {
+                    ctx.beginPath();
+                    ctx.strokeStyle = "rgba(136,255,136,0.5)";
+                    ctx.lineWidth = 5;
+                    ctx.arc(r.x, r.y, 130, 0, Math.PI*2);
+                    ctx.stroke();
+                    ctx.fillStyle = "rgba(136,255,136,0.03)";
+                    ctx.fill();
+                }
+            }
+
             // Texts
             for (const t of texts) {
                 ctx.globalAlpha = t.life / 60;
@@ -1128,6 +1108,8 @@
             ctx.restore();
 
             drawChat();
+            drawStats();
+
             if (robinVictory) {
                 ctx.fillStyle = `rgba(0,0,0,${0.3+Math.sin(performance.now()*0.01)*0.1})`;
                 ctx.fillRect(0,0,canvas.width,canvas.height);
@@ -1157,7 +1139,6 @@
 
             updateRobin(dt);
             for (const r of runners) updateRunner(r, dt);
-            updateMinions(dt);
             updateProjectiles(dt);
             updatePowerups(dt);
             updateParticles(dt);
