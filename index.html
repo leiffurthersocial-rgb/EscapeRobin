@@ -1,1372 +1,1174 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Robin Arena: Smart Combat</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Robin Arena Final</title>
+
 <style>
-  html, body {
+html, body {
     margin: 0;
     overflow: hidden;
-    width: 100%;
-    height: 100%;
     background:
-      radial-gradient(circle at center, #24243a 0%, #10101a 58%, #050507 100%);
+        radial-gradient(circle at center, #24243d 0%, #101018 60%, #040406 100%);
     font-family: Arial, sans-serif;
-  }
-  canvas { display: block; }
-  #ui {
+}
+
+canvas {
+    display: block;
+}
+
+#ui {
     position: absolute;
     top: 12px;
     left: 12px;
-    color: #fff;
+    color: white;
     background: rgba(0,0,0,0.35);
-    padding: 12px 14px;
+    padding: 12px 16px;
     border-radius: 14px;
-    backdrop-filter: blur(6px);
-    line-height: 1.4;
+    backdrop-filter: blur(5px);
     font-size: 14px;
-    user-select: none;
-    pointer-events: none;
-    max-width: 360px;
-  }
-  #ui b { color: #ff9090; }
+    line-height: 1.45;
+    max-width: 420px;
+}
+
+#ui b {
+    color: #ff8080;
+}
 </style>
 </head>
 <body>
+
 <div id="ui">
-  <b>Robin Arena: Smart Combat</b><br>
-  Brawler • Sniper • Opportunist • Powerups • Cooldowns<br>
-  Robin has multiple attacks, runners have real roles, and healing never overheals.
+<b>Robin Arena Final</b><br>
+Leif = berserker melee diver<br>
+Lennard = sniper assassin (high-risk close shot)<br>
+Erim = trickster bomber/support<br>
+Robin = predator boss with dash/slam/orbs
 </div>
 
 <canvas id="game"></canvas>
 
 <script>
-(() => {
-  const canvas = document.getElementById("game");
-  const ctx = canvas.getContext("2d");
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
 
-  function resize() {
+function resize(){
     canvas.width = innerWidth;
     canvas.height = innerHeight;
-  }
-  addEventListener("resize", resize);
-  resize();
+}
+addEventListener("resize", resize);
+resize();
 
-  const W = () => canvas.width;
-  const H = () => canvas.height;
-  const PAD = 76;
+function rand(min,max){ return Math.random()*(max-min)+min; }
+function clamp(v,min,max){ return Math.max(min,Math.min(max,v)); }
 
-  const TAU = Math.PI * 2;
+function dist(a,b){
+    return Math.hypot(a.x-b.x,a.y-b.y);
+}
 
-  function rand(min, max) { return Math.random() * (max - min) + min; }
-  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
-  function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
-  function len(x, y) { return Math.hypot(x, y); }
-  function norm(x, y) {
-    const l = Math.hypot(x, y) || 1;
-    return { x: x / l, y: y / l };
-  }
-  function dot(ax, ay, bx, by) { return ax * bx + ay * by; }
-  function angleTo(ax, ay, bx, by) { return Math.atan2(by - ay, bx - ax); }
-  function shortestAngleDiff(a, b) {
-    let d = (b - a + Math.PI) % TAU - Math.PI;
-    return d < -Math.PI ? d + TAU : d;
-  }
-  function clampMag(vx, vy, max) {
-    const l = Math.hypot(vx, vy);
-    if (l <= max || l === 0) return { x: vx, y: vy };
-    return { x: (vx / l) * max, y: (vy / l) * max };
-  }
+function norm(x,y){
+    const l = Math.hypot(x,y) || 1;
+    return {x:x/l,y:y/l};
+}
 
-  function loadImage(src) {
-    const img = new Image();
-    img.src = src;
-    return img;
-  }
+function load(src){
+    const i = new Image();
+    i.src = src;
+    return i;
+}
 
-  const imgs = {
-    robin: loadImage("robin.jpeg"),
-    leif: loadImage("leif.jpeg"),
-    lennard: loadImage("lennard.jpeg"),
-    erim: loadImage("erim.jpeg")
-  };
+const imgs = {
+    robin: load("robin.jpeg"),
+    leif: load("leif.jpeg"),
+    lennard: load("lennard.jpeg"),
+    erim: load("erim.jpeg")
+};
 
-  function imageReady(img) {
-    return img && img.complete && img.naturalWidth > 0;
-  }
+const particles = [];
+const projectiles = [];
+const powerups = [];
+const texts = [];
 
-  const particles = [];
-  const damageTexts = [];
-  const powerups = [];
-  const projectiles = [];
+function burst(x,y,color,count=18){
 
-  function burst(x, y, color, count = 18, sp = 5, lifeMin = 20, lifeMax = 45) {
-    for (let i = 0; i < count; i++) {
-      particles.push({
-        x, y,
-        vx: rand(-sp, sp),
-        vy: rand(-sp, sp),
-        life: rand(lifeMin, lifeMax),
-        maxLife: rand(lifeMin, lifeMax),
-        size: rand(1.8, 5.5),
-        color
-      });
+    for(let i=0;i<count;i++){
+
+        particles.push({
+            x,y,
+            vx: rand(-5,5),
+            vy: rand(-5,5),
+            life: rand(20,45),
+            color,
+            size: rand(2,5)
+        });
     }
-  }
+}
 
-  function floatText(x, y, text, color) {
-    damageTexts.push({
-      x, y,
-      vx: rand(-0.15, 0.15),
-      vy: rand(-0.9, -0.35),
-      life: 60,
-      maxLife: 60,
-      text,
-      color
+function textPop(x,y,text,color){
+
+    texts.push({
+        x,y,text,color,
+        vy: -1,
+        life: 60
     });
-  }
+}
 
-  function spawnPowerup() {
-    const roll = Math.random();
-    const type =
-      roll < 0.28 ? "heal" :
-      roll < 0.52 ? "speed" :
-      roll < 0.77 ? "damage" :
-      roll < 0.92 ? "shield" : "rapid";
+// ---------- ROBIN ----------
+const robin = {
+    x: canvas.width/2,
+    y: canvas.height/2,
+
+    vx: 0,
+    vy: 0,
+
+    size: 88,
+
+    hp: 260,
+    maxHp: 260,
+
+    alive: true,
+
+    facing: 0,
+
+    slashCd: 0,
+    orbCd: 0,
+    dashCd: 0,
+    slamCd: 0,
+
+    shield: 0,
+
+    state: "idle",
+    stateTimer: 0,
+
+    speedBuff: 1,
+    damageBuff: 1
+};
+
+// ---------- PLAYERS ----------
+const runners = [
+
+{
+    name: "leif",
+    role: "berserker",
+
+    x: 300,
+    y: 300,
+
+    vx: 0,
+    vy: 0,
+
+    hp: 115,
+    maxHp: 115,
+
+    size: 46,
+
+    alive: true,
+
+    immunity: 2000,
+
+    slashCd: 0,
+    leapCd: 0,
+
+    damageBuff: 1,
+    speedBuff: 1,
+
+    dance: 0
+},
+
+{
+    name: "lennard",
+    role: "sniper",
+
+    x: 900,
+    y: 500,
+
+    vx: 0,
+    vy: 0,
+
+    hp: 78,
+    maxHp: 78,
+
+    size: 42,
+
+    alive: true,
+
+    immunity: 2000,
+
+    snipeCd: 0,
+    panicShotCd: 0,
+    dodgeCd: 0,
+
+    damageBuff: 1,
+    speedBuff: 1,
+
+    dance: 0
+},
+
+{
+    name: "erim",
+    role: "trickster",
+
+    x: 700,
+    y: 700,
+
+    vx: 0,
+    vy: 0,
+
+    hp: 95,
+    maxHp: 95,
+
+    size: 44,
+
+    alive: true,
+
+    immunity: 2000,
+
+    bombCd: 0,
+    zapCd: 0,
+
+    damageBuff: 1,
+    speedBuff: 1,
+
+    dance: 0
+}
+
+];
+
+// ---------- POWERUPS ----------
+function spawnPowerup(){
+
+    const types = ["heal","speed","damage","shield"];
 
     powerups.push({
-      type,
-      x: rand(110, W() - 110),
-      y: rand(110, H() - 110),
-      pulse: rand(0, 999),
-      age: 0
+        x: rand(100,canvas.width-100),
+        y: rand(100,canvas.height-100),
+        type: types[Math.floor(Math.random()*types.length)],
+        pulse: rand(0,999)
     });
-  }
+}
 
-  function takeDamage(entity, amount, sourceX, sourceY, knock = 0.12) {
-    if (!entity.alive) return 0;
-    if (entity.invuln > 0) return 0;
+for(let i=0;i<6;i++) spawnPowerup();
 
-    let dmg = amount;
+// ---------- DAMAGE ----------
+function damage(target,amount,sourceX,sourceY){
 
-    if (entity.shield > 0) {
-      const absorbed = Math.min(entity.shield, dmg);
-      entity.shield -= absorbed;
-      dmg -= absorbed;
+    if(!target.alive) return;
+
+    if(target.immunity > 0) return;
+
+    // shield absorb
+    if(target.shield > 0){
+
+        const absorbed = Math.min(target.shield, amount);
+
+        target.shield -= absorbed;
+        amount -= absorbed;
     }
 
-    entity.hp -= dmg;
+    if(amount <= 0) return;
 
-    if (sourceX != null && sourceY != null) {
-      const d = norm(entity.x - sourceX, entity.y - sourceY);
-      entity.vx += d.x * knock * dmg;
-      entity.vy += d.y * knock * dmg;
-    }
+    target.hp -= amount;
 
-    return dmg;
-  }
-
-  function heal(entity, amount) {
-    entity.hp = Math.min(entity.maxHP, entity.hp + amount);
-  }
-
-  function drawEntity(entity, spriteKey, fallbackColor, opts = {}) {
-    const {
-      alpha = 1,
-      sizeMul = 1,
-      glow = fallbackColor,
-      rotate = 0,
-      label = ""
-    } = opts;
-
-    const size = entity.size * sizeMul;
-    ctx.save();
-    ctx.translate(entity.x, entity.y);
-    ctx.rotate(rotate);
-    ctx.globalAlpha = alpha;
-    ctx.shadowColor = glow;
-    ctx.shadowBlur = 24;
-
-    const img = imgs[spriteKey];
-    if (imageReady(img)) {
-      ctx.drawImage(img, -size / 2, -size / 2, size, size);
-    } else {
-      ctx.fillStyle = fallbackColor;
-      ctx.beginPath();
-      ctx.arc(0, 0, size * 0.5, 0, TAU);
-      ctx.fill();
-
-      ctx.fillStyle = "#fff";
-      ctx.font = `bold ${Math.max(12, size * 0.28)}px Arial`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(label || spriteKey[0].toUpperCase(), 0, 1);
-    }
-    ctx.restore();
-  }
-
-  function drawBars(entity, barColor, hpColor, label) {
-    const x = entity.x;
-    const y = entity.y;
-    const w = 48;
-    const hpPct = clamp(entity.hp / entity.maxHP, 0, 1);
-    const shPct = entity.maxShield > 0 ? clamp(entity.shield / entity.maxShield, 0, 1) : 0;
-
-    ctx.save();
-    ctx.globalAlpha = 0.95;
-    ctx.fillStyle = "#000";
-    ctx.fillRect(x - w / 2, y - entity.size / 2 - 22, w, 6);
-
-    ctx.fillStyle = hpColor;
-    ctx.fillRect(x - w / 2, y - entity.size / 2 - 22, w * hpPct, 6);
-
-    if (entity.maxShield > 0 && entity.shield > 0) {
-      ctx.fillStyle = barColor;
-      ctx.fillRect(x - w / 2, y - entity.size / 2 - 14, w * shPct, 4);
-    }
-
-    ctx.fillStyle = "rgba(255,255,255,0.85)";
-    ctx.font = "11px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText(label, x, y + entity.size / 2 + 14);
-
-    ctx.restore();
-  }
-
-  function drawArenaGrid() {
-    const t = performance.now() * 0.016;
-    ctx.strokeStyle = "rgba(255,255,255,0.04)";
-    ctx.lineWidth = 1;
-
-    for (let x = -60; x < W() + 60; x += 54) {
-      ctx.beginPath();
-      ctx.moveTo(x + (t % 54), 0);
-      ctx.lineTo(x + (t % 54), H());
-      ctx.stroke();
-    }
-
-    for (let y = -60; y < H() + 60; y += 54) {
-      ctx.beginPath();
-      ctx.moveTo(0, y + (t % 54));
-      ctx.lineTo(W(), y + (t % 54));
-      ctx.stroke();
-    }
-
-    // soft vignette ring
-    const g = ctx.createRadialGradient(W() / 2, H() / 2, 80, W() / 2, H() / 2, Math.max(W(), H()) * 0.6);
-    g.addColorStop(0, "rgba(255,255,255,0.02)");
-    g.addColorStop(1, "rgba(0,0,0,0.20)");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W(), H());
-  }
-
-  function drawPowerup(p) {
-    const pulse = Math.sin(p.pulse) * 5;
-    let color = "#66ccff";
-    if (p.type === "heal") color = "#66ff99";
-    if (p.type === "damage") color = "#ff6666";
-    if (p.type === "shield") color = "#c266ff";
-    if (p.type === "rapid") color = "#ffd166";
-
-    ctx.save();
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 24;
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 10 + pulse * 0.18, 0, TAU);
-    ctx.fill();
-
-    ctx.strokeStyle = "rgba(255,255,255,0.40)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 16 + pulse * 0.15, 0, TAU);
-    ctx.stroke();
-
-    ctx.restore();
-  }
-
-  function spawnProjectile(p) {
-    projectiles.push(p);
-  }
-
-  function doExplosion(x, y, radius, owner, damage, knock = 0.1) {
-    const targets = owner === "robin" ? runners : [robin];
-    for (const t of targets) {
-      if (!t.alive) continue;
-      const d = Math.hypot(t.x - x, t.y - y);
-      if (d < radius) {
-        const falloff = 1 - d / radius;
-        const dealt = takeDamage(t, damage * (0.45 + falloff * 0.55), x, y, knock);
-        if (dealt > 0) {
-          floatText(t.x, t.y - 8, `-${Math.round(dealt)}`, owner === "robin" ? "#ff8080" : "#ffe86b");
-        }
-      }
-    }
-    burst(x, y, owner === "robin" ? "#ff5555" : "#66ccff", 26, 5.2, 14, 32);
-  }
-
-  function coneAttack(attacker, targets, range, arcDeg, damage, knock = 0.12) {
-    const fx = Math.cos(attacker.facing);
-    const fy = Math.sin(attacker.facing);
-    const arc = arcDeg * Math.PI / 180;
-    let hits = 0;
-
-    for (const t of targets) {
-      if (!t.alive) continue;
-      const dx = t.x - attacker.x;
-      const dy = t.y - attacker.y;
-      const d = Math.hypot(dx, dy);
-      if (d > range) continue;
-      const nx = dx / (d || 1), ny = dy / (d || 1);
-      const a = Math.acos(clamp(dot(fx, fy, nx, ny), -1, 1));
-      if (a <= arc / 2) {
-        const dealt = takeDamage(t, damage, attacker.x, attacker.y, knock);
-        if (dealt > 0) {
-          floatText(t.x, t.y - 8, `-${Math.round(dealt)}`, attacker.team === "robin" ? "#ff8080" : "#ffe86b");
-          hits++;
-        }
-      }
-    }
-    return hits;
-  }
-
-  function buildEntity(base) {
-    return {
-      ...base,
-      vx: 0,
-      vy: 0,
-      facing: 0,
-      alive: true,
-      invuln: 0,
-      shield: 0,
-      maxShield: base.maxShield || 0,
-
-      speedMult: 1,
-      speedTimer: 0,
-      damageMult: 1,
-      damageTimer: 0,
-      rapidMult: 1,
-      rapidTimer: 0,
-
-      respawn: 0,
-      dance: 0
-    };
-  }
-
-  let robin, runners, victoryMode, victoryTimer, roundTimer;
-
-  function setupRound() {
-    robin = buildEntity({
-      name: "robin",
-      team: "robin",
-      x: W() * 0.5,
-      y: H() * 0.5,
-      size: 84,
-      maxHP: 250,
-      hp: 250,
-      maxShield: 40
-    });
-    robin.swipeCd = 0;
-    robin.orbCd = 0;
-    robin.dashCd = 0;
-    robin.slamCd = 0;
-    robin.state = "idle";
-    robin.stateT = 0;
-    robin.stateData = {};
-    robin.aiBias = 0;
-
-    runners = [
-      buildEntity({
-        name: "leif",
-        team: "runner",
-        x: rand(130, W() - 130),
-        y: rand(130, H() - 130),
-        size: 42,
-        maxHP: 92,
-        hp: 92,
-        maxShield: 26,
-        role: "brawler"
-      }),
-      buildEntity({
-        name: "lennard",
-        team: "runner",
-        x: rand(130, W() - 130),
-        y: rand(130, H() - 130),
-        size: 42,
-        maxHP: 82,
-        hp: 82,
-        maxShield: 20,
-        role: "sniper"
-      }),
-      buildEntity({
-        name: "erim",
-        team: "runner",
-        x: rand(130, W() - 130),
-        y: rand(130, H() - 130),
-        size: 42,
-        maxHP: 88,
-        hp: 88,
-        maxShield: 28,
-        role: "opportunist"
-      })
-    ];
-
-    // personality tuning
-    runners[0].aggro = 1.55;
-    runners[0].care = 0.50;
-    runners[0].prefer = 72;
-    runners[0].attackStyle = "melee";
-
-    runners[1].aggro = 0.72;
-    runners[1].care = 1.25;
-    runners[1].prefer = 320;
-    runners[1].attackStyle = "ranged";
-
-    runners[2].aggro = 1.02;
-    runners[2].care = 1.50;
-    runners[2].prefer = 190;
-    runners[2].attackStyle = "hybrid";
-
-    runners[0].slashCd = 0;
-    runners[0].pounceCd = 0;
-    runners[1].shotCd = 0;
-    runners[1].burstCd = 0;
-    runners[2].bombCd = 0;
-    runners[2].zapCd = 0;
-
-    particles.length = 0;
-    projectiles.length = 0;
-    powerups.length = 0;
-    damageTexts.length = 0;
-
-    for (let i = 0; i < 5; i++) spawnPowerup();
-
-    victoryMode = false;
-    victoryTimer = 0;
-    roundTimer = 0;
-  }
-
-  setupRound();
-
-  function nearestPowerupFor(entity) {
-    let best = null;
-    let bestScore = -Infinity;
-
-    for (const p of powerups) {
-      const d = dist(entity, p);
-      let desire = 0;
-
-      if (p.type === "heal") {
-        const missing = 1 - entity.hp / entity.maxHP;
-        desire = missing * 4.0 + (entity.role === "opportunist" ? 0.55 : 0.2);
-      } else if (p.type === "speed") {
-        desire = entity.role === "sniper" ? 1.65 : entity.role === "brawler" ? 0.95 : 1.25;
-      } else if (p.type === "damage") {
-        desire = entity.role === "brawler" ? 1.45 : entity.role === "sniper" ? 1.1 : 1.35;
-      } else if (p.type === "shield") {
-        desire = entity.hp < entity.maxHP * 0.72 ? 1.6 : 0.7;
-      } else if (p.type === "rapid") {
-        desire = entity.role === "sniper" ? 1.35 : 1.05;
-      }
-
-      // closer + more needed = more attractive
-      const score = desire / (70 + d);
-      if (score > bestScore) {
-        bestScore = score;
-        best = p;
-      }
-    }
-
-    return { powerup: best, score: bestScore };
-  }
-
-  function buffTick(entity, dt) {
-    if (entity.invuln > 0) entity.invuln -= dt;
-
-    if (entity.speedTimer > 0) {
-      entity.speedTimer -= dt;
-      if (entity.speedTimer <= 0) entity.speedMult = 1;
-    }
-
-    if (entity.damageTimer > 0) {
-      entity.damageTimer -= dt;
-      if (entity.damageTimer <= 0) entity.damageMult = 1;
-    }
-
-    if (entity.rapidTimer > 0) {
-      entity.rapidTimer -= dt;
-      if (entity.rapidTimer <= 0) entity.rapidMult = 1;
-    }
-  }
-
-  function applyPowerup(entity, type) {
-    if (type === "heal") {
-      heal(entity, entity.maxHP * 0.28);
-      floatText(entity.x, entity.y - 18, "+HP", "#66ff99");
-    } else if (type === "speed") {
-      entity.speedMult = Math.max(entity.speedMult, 1.32);
-      entity.speedTimer = 6500;
-      floatText(entity.x, entity.y - 18, "SPD", "#66ccff");
-    } else if (type === "damage") {
-      entity.damageMult = Math.max(entity.damageMult, 1.45);
-      entity.damageTimer = 7000;
-      floatText(entity.x, entity.y - 18, "DMG", "#ff6666");
-    } else if (type === "shield") {
-      entity.shield = Math.min(entity.maxShield, entity.shield + (entity.team === "robin" ? 18 : 16));
-      floatText(entity.x, entity.y - 18, "SHD", "#c266ff");
-    } else if (type === "rapid") {
-      entity.rapidMult = Math.max(entity.rapidMult, 0.72);
-      entity.rapidTimer = 6500;
-      floatText(entity.x, entity.y - 18, "RPD", "#ffd166");
-    }
-  }
-
-  function moveEntity(entity, step, maxSpeed) {
-    const moved = clampMag(entity.vx, entity.vy, maxSpeed);
-    entity.vx = moved.x;
-    entity.vy = moved.y;
-    entity.x += entity.vx * step;
-    entity.y += entity.vy * step;
-
-    entity.x = clamp(entity.x, PAD, W() - PAD);
-    entity.y = clamp(entity.y, PAD, H() - PAD);
-  }
-
-  function wallRepulsion(entity) {
-    const m = 170;
-    let x = 0, y = 0;
-
-    if (entity.x < m) x += (m - entity.x) * 0.05;
-    if (entity.x > W() - m) x -= (entity.x - (W() - m)) * 0.05;
-    if (entity.y < m) y += (m - entity.y) * 0.05;
-    if (entity.y > H() - m) y -= (entity.y - (H() - m)) * 0.05;
-
-    return { x, y };
-  }
-
-  function updateRunnerAI(r, step) {
-    if (!r.alive) return;
-
-    const toRobin = { x: robin.x - r.x, y: robin.y - r.y };
-    const d = Math.hypot(toRobin.x, toRobin.y) || 1;
-    const nx = toRobin.x / d;
-    const ny = toRobin.y / d;
-
-    const away = { x: -nx, y: -ny };
-    const tangent = { x: -ny, y: nx };
-
-    const { powerup: p, score } = nearestPowerupFor(r);
-    const wantsPower = p && (
-      r.hp < r.maxHP * 0.62 ||
-      (r.role === "opportunist" && score > 0.0011) ||
-      (r.role === "sniper" && p.type !== "heal" && score > 0.0010) ||
-      (r.role === "brawler" && p.type === "damage" && score > 0.0010)
+    textPop(
+        target.x,
+        target.y - 20,
+        "-" + Math.round(amount),
+        "#ff7777"
     );
 
-    let steerX = 0;
-    let steerY = 0;
+    burst(target.x,target.y,"#ff5555",10);
 
-    // Personality-based range control.
-    if (r.role === "brawler") {
-      const ideal = 72;
-      const diff = d - ideal;
-      if (diff > 12) { steerX += nx * 0.30; steerY += ny * 0.30; }
-      else if (diff < -12) { steerX += away.x * 0.42; steerY += away.y * 0.42; }
-      else { steerX += tangent.x * 0.24; steerY += tangent.y * 0.24; }
-      steerX += nx * 0.10 * r.aggro;
-      steerY += ny * 0.10 * r.aggro;
-    } else if (r.role === "sniper") {
-      const minR = 250, maxR = 380;
-      if (d < minR) { steerX += away.x * 0.55; steerY += away.y * 0.55; }
-      else if (d > maxR) { steerX += nx * 0.36; steerY += ny * 0.36; }
-      else { steerX += tangent.x * 0.28; steerY += tangent.y * 0.28; }
-    } else {
-      const ideal = 190;
-      const diff = d - ideal;
-      if (diff > 15) { steerX += nx * 0.24; steerY += ny * 0.24; }
-      else if (diff < -15) { steerX += away.x * 0.32; steerY += away.y * 0.32; }
-      steerX += tangent.x * 0.18;
-      steerY += tangent.y * 0.18;
-    }
+    const dx = target.x-sourceX;
+    const dy = target.y-sourceY;
 
-    // Flee Robin's immediate threat zone.
-    const panic = clamp(1 - d / 260, 0, 1);
-    steerX += away.x * panic * (0.52 + r.care * 0.10);
-    steerY += away.y * panic * (0.52 + r.care * 0.10);
+    const n = norm(dx,dy);
 
-    // Powerup seeking.
-    if (wantsPower && p) {
-      const pd = Math.hypot(p.x - r.x, p.y - r.y) || 1;
-      const px = (p.x - r.x) / pd;
-      const py = (p.y - r.y) / pd;
+    target.vx += n.x * amount * 0.03;
+    target.vy += n.y * amount * 0.03;
 
-      const powerBias =
-        p.type === "heal" ? 1.35 :
-        p.type === "damage" ? 1.05 :
-        p.type === "speed" ? 1.15 :
-        p.type === "shield" ? 1.20 : 1.00;
+    if(target.hp <= 0){
 
-      steerX = steerX * 0.58 + px * 0.52 * powerBias;
-      steerY = steerY * 0.58 + py * 0.52 * powerBias;
-    }
+        target.hp = 0;
 
-    // Anti-corner steering.
-    const wall = wallRepulsion(r);
-    steerX += wall.x;
-    steerY += wall.y;
+        if(target === robin){
 
-    // Small separation so they don't stack.
-    for (const other of runners) {
-      if (other === r || !other.alive) continue;
-      const odx = r.x - other.x;
-      const ody = r.y - other.y;
-      const od = Math.hypot(odx, ody);
-      if (od > 0 && od < 78) {
-        steerX += (odx / od) * 0.18;
-        steerY += (ody / od) * 0.18;
-      }
-    }
+            robin.alive = false;
 
-    // Micro-randomness for personality.
-    steerX += rand(-0.03, 0.03);
-    steerY += rand(-0.03, 0.03);
+            burst(robin.x,robin.y,"white",120);
 
-    const speed = (r.role === "brawler" ? 2.95 : r.role === "sniper" ? 2.55 : 2.8) * r.speedMult;
-    r.vx = r.vx * 0.90 + steerX * speed;
-    r.vy = r.vy * 0.90 + steerY * speed;
-
-    // Update facing by movement if moving.
-    const mv = len(r.vx, r.vy);
-    if (mv > 0.05) r.facing = Math.atan2(r.vy, r.vx);
-
-    moveEntity(r, step, speed * 1.35);
-  }
-
-  function runnerAttackAI(r, step) {
-    if (!r.alive || !robin.alive) return;
-    const d = dist(r, robin);
-
-    if (r.role === "brawler") {
-      // Slash: close cone, quick cooldown.
-      if (r.slashCd > 0) r.slashCd -= step * 16.67;
-      if (r.pounceCd > 0) r.pounceCd -= step * 16.67;
-
-      if (r.slashCd <= 0 && d < 96) {
-        r.facing = angleTo(r.x, r.y, robin.x, robin.y);
-        const dmg = 12 * r.damageMult;
-        if (coneAttack(r, [robin], 98, 108, dmg, 0.14) > 0) {
-          burst(robin.x, robin.y, "#ffcc66", 8, 3.8, 12, 24);
-        }
-        r.slashCd = 680;
-      }
-
-      // Pounce if just outside melee.
-      if (r.pounceCd <= 0 && d >= 70 && d < 220) {
-        r.facing = angleTo(r.x, r.y, robin.x, robin.y);
-        const p = norm(robin.x - r.x, robin.y - r.y);
-        r.vx += p.x * 6.8;
-        r.vy += p.y * 6.8;
-        r.pounceCd = 3400;
-        burst(r.x, r.y, "#ffffff", 10, 4.2, 10, 18);
-      }
-    }
-
-    if (r.role === "sniper") {
-      if (r.shotCd > 0) r.shotCd -= step * 16.67;
-      if (r.burstCd > 0) r.burstCd -= step * 16.67;
-
-      // Fire when at a healthy distance.
-      if (r.shotCd <= 0 && d > 180) {
-        r.facing = angleTo(r.x, r.y, robin.x, robin.y);
-        const a = r.facing;
-        const bulletSpeed = 9.0 * r.speedMult;
-        spawnProjectile({
-          owner: "runner",
-          kind: "bullet",
-          x: r.x + Math.cos(a) * 22,
-          y: r.y + Math.sin(a) * 22,
-          vx: Math.cos(a) * bulletSpeed,
-          vy: Math.sin(a) * bulletSpeed,
-          life: 180,
-          radius: 5,
-          damage: 8 * r.damageMult,
-          color: "#66ccff",
-          trail: "#8be3ff"
-        });
-        if (Math.random() < 0.40) {
-          spawnProjectile({
-            owner: "runner",
-            kind: "bullet",
-            x: r.x + Math.cos(a + 0.07) * 18,
-            y: r.y + Math.sin(a + 0.07) * 18,
-            vx: Math.cos(a + rand(-0.05, 0.05)) * (bulletSpeed * 0.96),
-            vy: Math.sin(a + rand(-0.05, 0.05)) * (bulletSpeed * 0.96),
-            life: 180,
-            radius: 5,
-            damage: 7 * r.damageMult,
-            color: "#8be3ff",
-            trail: "#8be3ff"
-          });
-        }
-        burst(r.x + Math.cos(a) * 20, r.y + Math.sin(a) * 20, "#66ccff", 6, 2.8, 8, 14);
-        r.shotCd = 480;
-      }
-
-      // Emergency burst if Robin gets close.
-      if (r.burstCd <= 0 && d < 170) {
-        const away = norm(r.x - robin.x, r.y - robin.y);
-        r.vx += away.x * 4.2;
-        r.vy += away.y * 4.2;
-        r.burstCd = 1700;
-      }
-    }
-
-    if (r.role === "opportunist") {
-      if (r.zapCd > 0) r.zapCd -= step * 16.67;
-      if (r.bombCd > 0) r.bombCd -= step * 16.67;
-
-      // Smart bomb throw: medium distance splash.
-      if (r.bombCd <= 0 && d > 120 && d < 360) {
-        r.facing = angleTo(r.x, r.y, robin.x, robin.y);
-        const a = r.facing;
-        spawnProjectile({
-          owner: "runner",
-          kind: "bomb",
-          x: r.x + Math.cos(a) * 20,
-          y: r.y + Math.sin(a) * 20,
-          vx: Math.cos(a) * 5.1,
-          vy: Math.sin(a) * 5.1,
-          life: 110,
-          fuse: 58,
-          radius: 8,
-          damage: 12 * r.damageMult,
-          splash: 56,
-          color: "#ff7d7d",
-          trail: "#ffd1d1"
-        });
-        burst(r.x + Math.cos(a) * 20, r.y + Math.sin(a) * 20, "#ff7777", 10, 3, 8, 18);
-        r.bombCd = 1250;
-      }
-
-      // Occasional zap when close to medium range.
-      if (r.zapCd <= 0 && d < 250) {
-        r.facing = angleTo(r.x, r.y, robin.x, robin.y);
-        const a = r.facing + rand(-0.08, 0.08);
-        spawnProjectile({
-          owner: "runner",
-          kind: "bullet",
-          x: r.x + Math.cos(a) * 22,
-          y: r.y + Math.sin(a) * 22,
-          vx: Math.cos(a) * 8.4,
-          vy: Math.sin(a) * 8.4,
-          life: 150,
-          radius: 5,
-          damage: 6.5 * r.damageMult,
-          color: "#ffd166",
-          trail: "#ffe6a3"
-        });
-        r.zapCd = 520;
-      }
-    }
-  }
-
-  function runnerRespawn(r) {
-    r.alive = true;
-    r.hp = r.maxHP;
-    r.shield = 0;
-    r.invuln = 2200;
-    r.vx = rand(-1, 1);
-    r.vy = rand(-1, 1);
-    r.x = rand(120, W() - 120);
-    r.y = rand(120, H() - 120);
-    burst(r.x, r.y, "#66ffcc", 28, 5, 14, 28);
-  }
-
-  function robinAI(step) {
-    if (!robin.alive) return;
-
-    if (robin.swipeCd > 0) robin.swipeCd -= step * 16.67;
-    if (robin.orbCd > 0) robin.orbCd -= step * 16.67;
-    if (robin.dashCd > 0) robin.dashCd -= step * 16.67;
-    if (robin.slamCd > 0) robin.slamCd -= step * 16.67;
-
-    if (robin.stateT > 0) robin.stateT -= step * 16.67;
-
-    const aliveRunners = runners.filter(r => r.alive);
-    if (!aliveRunners.length) return;
-
-    // Choose the most annoying target: close, healthy, or dangerous.
-    let target = aliveRunners[0];
-    let bestScore = Infinity;
-
-    for (const r of aliveRunners) {
-      const d = dist(robin, r);
-      const threat = r.role === "sniper" ? 1.2 : r.role === "brawler" ? 1.0 : 1.1;
-      const score = d - (r.hp < r.maxHP * 0.4 ? 40 : 0) - threat * 16;
-      if (score < bestScore) {
-        bestScore = score;
-        target = r;
-      }
-    }
-
-    const d = dist(robin, target);
-    const dx = target.x - robin.x;
-    const dy = target.y - robin.y;
-    const n = norm(dx, dy);
-
-    robin.facing = Math.atan2(dy, dx);
-
-    // If low HP, Robin values healing powerups.
-    const { powerup: healP, score: healScore } = nearestPowerupFor(robin);
-    const wantsHeal = healP && robin.hp < robin.maxHP * 0.5 && healScore > 0.0011;
-
-    // State transitions.
-    if (robin.state === "slam") {
-      // windup; stationary and dramatic.
-      if (robin.stateT <= 0) {
-        robin.state = "idle";
-        robin.slamCd = 7800;
-        const slamRadius = 145;
-        for (const r of aliveRunners) {
-          const dd = dist(robin, r);
-          if (dd < slamRadius) {
-            const fall = 1 - dd / slamRadius;
-            const dealt = takeDamage(r, (24 + 12 * fall) * robin.damageMult, robin.x, robin.y, 0.18);
-            if (dealt > 0) floatText(r.x, r.y - 10, `-${Math.round(dealt)}`, "#ff8080");
-          }
-        }
-        burst(robin.x, robin.y, "#ff4444", 46, 6, 10, 30);
-      }
-    } else if (robin.state === "dash") {
-      if (robin.stateT > 0) {
-        robin.vx += robin.stateData.dx * 1.0;
-        robin.vy += robin.stateData.dy * 1.0;
-        const dmg = 18 * robin.damageMult;
-
-        for (const r of aliveRunners) {
-          if (dist(robin, r) < robin.size * 0.46 + r.size * 0.33) {
-            const dealt = takeDamage(r, dmg, robin.x, robin.y, 0.17);
-            if (dealt > 0) {
-              floatText(r.x, r.y - 10, `-${Math.round(dealt)}`, "#ff9090");
-              burst(r.x, r.y, "#ff6666", 8, 3.4, 10, 16);
+            for(const r of runners){
+                if(r.alive){
+                    r.dance = rand(0,100);
+                }
             }
-          }
-        }
-      } else {
-        robin.state = "idle";
-        robin.dashCd = 4100;
-      }
-    } else {
-      // When idle, choose a strong action if available.
-      const nearby = aliveRunners.filter(r => dist(robin, r) < 150).length;
 
-      if (robin.slamCd <= 0 && (nearby >= 2 || robin.hp < 110)) {
-        robin.state = "slam";
-        robin.stateT = 420;
-        robin.vx *= 0.55;
-        robin.vy *= 0.55;
-        burst(robin.x, robin.y, "#ff8080", 18, 2.4, 9, 18);
-      } else if (robin.dashCd <= 0 && d > 115 && d < 460) {
-        robin.state = "dash";
-        robin.stateT = 260;
-        robin.stateData.dx = n.x * 7.0;
-        robin.stateData.dy = n.y * 7.0;
-        robin.vx += n.x * 4.2;
-        robin.vy += n.y * 4.2;
-        burst(robin.x, robin.y, "#ffffff", 10, 4.2, 8, 16);
-      } else if (robin.orbCd <= 0 && d > 120) {
-        robin.orbCd = 3400;
-        const base = robin.facing;
-        for (let i = -1; i <= 1; i++) {
-          const a = base + i * 0.16;
-          spawnProjectile({
-            owner: "robin",
-            kind: "orb",
-            x: robin.x + Math.cos(a) * 24,
-            y: robin.y + Math.sin(a) * 24,
-            vx: Math.cos(a) * 6.6,
-            vy: Math.sin(a) * 6.6,
-            life: 230,
-            radius: 8,
-            damage: 11 * robin.damageMult,
-            splash: 44,
-            color: "#ff7777",
-            trail: "#ffb0b0",
-            homing: true
-          });
+        } else {
+
+            target.alive = false;
+            target.respawn = rand(2500,5000);
+
+            burst(target.x,target.y,"#ff2222",45);
         }
-        burst(robin.x, robin.y, "#ff6666", 18, 4.6, 10, 18);
-      } else if (robin.swipeCd <= 0 && d < 102) {
-        robin.swipeCd = 620;
-        const dmg = 17 * robin.damageMult;
-        const hitCount = coneAttack(robin, aliveRunners, 108, 120, dmg, 0.17);
-        if (hitCount > 0) {
-          burst(target.x, target.y, "#ff5555", 16, 5.5, 8, 18);
+    }
+}
+
+// ---------- HEAL ----------
+function heal(entity,amount){
+
+    entity.hp = Math.min(entity.maxHp, entity.hp + amount);
+}
+
+// ---------- PROJECTILES ----------
+function shoot(owner,x,y,angle,speed,damageAmount,color,size=5,type="bullet"){
+
+    projectiles.push({
+        owner,
+        x,
+        y,
+        vx: Math.cos(angle)*speed,
+        vy: Math.sin(angle)*speed,
+        damage: damageAmount,
+        color,
+        size,
+        type,
+        life: 220
+    });
+}
+
+// ---------- ROBIN AI ----------
+function updateRobin(dt){
+
+    if(!robin.alive) return;
+
+    robin.slashCd -= dt;
+    robin.orbCd -= dt;
+    robin.dashCd -= dt;
+    robin.slamCd -= dt;
+
+    // nearest target
+    let target = null;
+    let best = Infinity;
+
+    for(const r of runners){
+
+        if(!r.alive) continue;
+
+        const d = dist(robin,r);
+
+        if(d < best){
+            best = d;
+            target = r;
         }
-      }
     }
 
-    // Steering when not locked in a strong state.
-    if (robin.state === "idle") {
-      let steerX = 0, steerY = 0;
+    if(!target) return;
 
-      if (wantsHeal && healP) {
-        const p = healP;
-        const pd = Math.hypot(p.x - robin.x, p.y - robin.y) || 1;
-        steerX += ((p.x - robin.x) / pd) * 0.50;
-        steerY += ((p.y - robin.y) / pd) * 0.50;
-      } else {
-        // Chase, but with smart pathing and less corner stupidity.
-        steerX += n.x * 0.28;
-        steerY += n.y * 0.28;
+    const dx = target.x-robin.x;
+    const dy = target.y-robin.y;
 
-        // orbit so Robin doesn't just shove straight into the nearest target.
-        const orbit = (robin.hp < 110 ? -1 : 1) * 0.18;
-        steerX += (-n.y) * orbit;
-        steerY += (n.x) * orbit;
+    const d = Math.hypot(dx,dy);
 
-        // slight bias toward the weakest runner.
-        let weakest = aliveRunners[0];
-        for (const r of aliveRunners) if (r.hp < weakest.hp) weakest = r;
-        const wd = dist(robin, weakest);
-        const wn = norm(weakest.x - robin.x, weakest.y - robin.y);
-        steerX += wn.x * clamp(1 - wd / 420, 0, 1) * 0.12;
-        steerY += wn.y * clamp(1 - wd / 420, 0, 1) * 0.12;
-      }
+    const n = norm(dx,dy);
 
-      const wall = wallRepulsion(robin);
-      steerX += wall.x * 0.8;
-      steerY += wall.y * 0.8;
+    robin.facing = Math.atan2(dy,dx);
 
-      robin.vx = robin.vx * 0.92 + steerX * (2.1 * robin.speedMult);
-      robin.vy = robin.vy * 0.92 + steerY * (2.1 * robin.speedMult);
+    // movement
+    robin.vx += n.x * 0.18;
+    robin.vy += n.y * 0.18;
 
-      const mv = len(robin.vx, robin.vy);
-      if (mv > 0.03) robin.facing = Math.atan2(robin.vy, robin.vx);
+    robin.vx *= 0.93;
+    robin.vy *= 0.93;
 
-      moveEntity(robin, step, 3.6 * robin.speedMult);
+    robin.x += robin.vx * 1.8 * robin.speedBuff;
+    robin.y += robin.vy * 1.8 * robin.speedBuff;
 
-      // Small contact pressure.
-      for (const r of aliveRunners) {
-        const dd = dist(robin, r);
-        if (dd < robin.size * 0.50 + r.size * 0.38) {
-          const dealt = takeDamage(r, 3.5 * robin.damageMult, robin.x, robin.y, 0.10);
-          if (dealt > 0) floatText(r.x, r.y - 10, `-${Math.round(dealt)}`, "#ff9090");
-        }
-      }
+    robin.x = clamp(robin.x,80,canvas.width-80);
+    robin.y = clamp(robin.y,80,canvas.height-80);
+
+    // slash
+    if(d < 100 && robin.slashCd <= 0){
+
+        robin.slashCd = 700;
+
+        damage(target,16*robin.damageBuff,robin.x,robin.y);
     }
-  }
 
-  function updateProjectiles(step) {
-    for (let i = projectiles.length - 1; i >= 0; i--) {
-      const p = projectiles[i];
+    // orb attack
+    if(d > 140 && robin.orbCd <= 0){
 
-      if (p.kind === "orb" && p.homing && robin.alive && p.owner === "robin") {
-        let target = null;
-        let best = Infinity;
-        for (const r of runners) {
-          if (!r.alive) continue;
-          const d = dist(p, r);
-          if (d < best) { best = d; target = r; }
+        robin.orbCd = 2400;
+
+        for(let i=-1;i<=1;i++){
+
+            shoot(
+                robin,
+                robin.x,
+                robin.y,
+                robin.facing + i*0.15,
+                6,
+                13*robin.damageBuff,
+                "#ff6666",
+                7,
+                "orb"
+            );
         }
-        if (target) {
-          const dir = norm(target.x - p.x, target.y - p.y);
-          p.vx = p.vx * 0.94 + dir.x * 1.0;
-          p.vy = p.vy * 0.94 + dir.y * 1.0;
-          const l = len(p.vx, p.vy);
-          const cap = 7.8;
-          if (l > cap) {
-            p.vx = p.vx / l * cap;
-            p.vy = p.vy / l * cap;
-          }
-        }
-      }
+    }
 
-      p.x += p.vx * step;
-      p.y += p.vy * step;
+    // dash attack
+    if(d > 130 && d < 300 && robin.dashCd <= 0){
 
-      p.life -= step * 16.67;
-      if (p.fuse != null) p.fuse -= step * 16.67;
+        robin.dashCd = 4200;
 
-      // trail particles
-      if (Math.random() < 0.55) {
-        particles.push({
-          x: p.x, y: p.y,
-          vx: rand(-0.6, 0.6),
-          vy: rand(-0.6, 0.6),
-          life: 12,
-          maxLife: 12,
-          size: rand(1.3, 2.8),
-          color: p.trail || p.color
-        });
-      }
+        robin.vx += n.x * 10;
+        robin.vy += n.y * 10;
 
-      const targets = p.owner === "robin" ? runners : [robin];
-      let hit = false;
+        damage(target,20*robin.damageBuff,robin.x,robin.y);
+    }
 
-      for (const t of targets) {
-        if (!t.alive) continue;
-        if (t.invuln > 0) continue;
-        const d = Math.hypot(t.x - p.x, t.y - p.y);
-        if (d < (p.radius || 6) + t.size * 0.30) {
-          if (p.kind === "bullet") {
-            const dealt = takeDamage(t, p.damage, p.x, p.y, 0.12);
-            if (dealt > 0) {
-              floatText(t.x, t.y - 10, `-${Math.round(dealt)}`, p.owner === "robin" ? "#ff9090" : "#ffe86b");
+    // slam
+    if(d < 160 && robin.slamCd <= 0){
+
+        robin.slamCd = 7000;
+
+        for(const r of runners){
+
+            if(!r.alive) continue;
+
+            if(dist(robin,r) < 160){
+
+                damage(
+                    r,
+                    24*robin.damageBuff,
+                    robin.x,
+                    robin.y
+                );
             }
-            burst(p.x, p.y, p.color, 10, 3.3, 8, 15);
-            hit = true;
-          } else if (p.kind === "orb") {
-            doExplosion(p.x, p.y, p.splash || 42, p.owner, p.damage, 0.13);
-            hit = true;
-          } else if (p.kind === "bomb") {
-            doExplosion(p.x, p.y, p.splash || 56, p.owner, p.damage, 0.16);
-            hit = true;
-          }
-          break;
         }
-      }
 
-      if (!hit) {
-        if (p.kind === "bomb" && p.fuse <= 0) {
-          doExplosion(p.x, p.y, p.splash || 56, p.owner, p.damage, 0.16);
-          hit = true;
-        } else if (p.life <= 0) {
-          if (p.kind === "orb") {
-            doExplosion(p.x, p.y, p.splash || 42, p.owner, p.damage, 0.13);
-          }
-          hit = true;
-        } else if (p.x < -120 || p.x > W() + 120 || p.y < -120 || p.y > H() + 120) {
-          hit = true;
-        }
-      }
-
-      if (hit) projectiles.splice(i, 1);
+        burst(robin.x,robin.y,"#ff4444",50);
     }
-  }
+}
 
-  function updateParticles(step) {
-    for (let i = particles.length - 1; i >= 0; i--) {
-      const p = particles[i];
-      p.x += p.vx * step;
-      p.y += p.vy * step;
-      p.vx *= 0.97;
-      p.vy *= 0.97;
-      p.life -= step * 16.67;
-      if (p.life <= 0) particles.splice(i, 1);
-    }
+// ---------- RUNNER AI ----------
+function updateRunner(r,dt){
 
-    for (let i = damageTexts.length - 1; i >= 0; i--) {
-      const t = damageTexts[i];
-      t.x += t.vx * step * 16.67;
-      t.y += t.vy * step * 16.67;
-      t.vy += 0.02 * step * 16.67;
-      t.life -= step * 16.67;
-      if (t.life <= 0) damageTexts.splice(i, 1);
-    }
-  }
+    if(!r.alive){
 
-  function updatePowerups(step) {
-    for (let i = powerups.length - 1; i >= 0; i--) {
-      const p = powerups[i];
-      p.age += step * 16.67;
-      p.pulse += step * 0.18;
-
-      // Robin can collect powerups too.
-      if (robin.alive && dist(robin, p) < robin.size * 0.42 + 14) {
-        applyPowerup(robin, p.type);
-        burst(p.x, p.y, "#ffcc66", 24, 4.6, 8, 18);
-        powerups.splice(i, 1);
-        continue;
-      }
-
-      for (const r of runners) {
-        if (!r.alive) continue;
-        if (dist(r, p) < r.size * 0.40 + 10) {
-          applyPowerup(r, p.type);
-          burst(p.x, p.y, "#66ccff", 20, 4.2, 8, 18);
-          powerups.splice(i, 1);
-          break;
-        }
-      }
-    }
-
-    while (powerups.length < 7) spawnPowerup();
-  }
-
-  function updateVictory(step) {
-    victoryTimer -= step * 16.67;
-    for (const r of runners) {
-      if (!r.alive) continue;
-      r.dance += step * 0.12;
-      r.x += Math.sin(r.dance * 2.4) * 1.4;
-      r.y += Math.cos(r.dance * 1.8) * 1.4;
-      if (Math.random() < 0.30) burst(r.x, r.y, "rgba(255,255,120,0.95)", 1, 1.4, 8, 10);
-    }
-
-    if (victoryTimer <= 0) setupRound();
-  }
-
-  function updateDeadRobin(step) {
-    victoryTimer -= step * 16.67;
-    for (const r of runners) {
-      if (!r.alive) continue;
-      r.dance += step * 0.14;
-      r.x += Math.sin(r.dance * 2.2) * 2.0;
-      r.y += Math.cos(r.dance * 2.7) * 2.0;
-    }
-    if (victoryTimer <= 0) setupRound();
-  }
-
-  function update(dt) {
-    const step = clamp(dt / 16.67, 0, 2.4);
-
-    roundTimer += dt;
-
-    if (!victoryMode) {
-      // Robin may die if the runners coordinate enough.
-      if (robin.alive) {
-        if (robin.hp <= 0) {
-          robin.alive = false;
-          victoryMode = true;
-          victoryTimer = 6800;
-          burst(robin.x, robin.y, "#ffffff", 100, 6.5, 12, 28);
-          for (const r of runners) {
-            if (r.alive) {
-              r.dance = rand(0, 999);
-              burst(r.x, r.y, "#ffe36b", 14, 3.4, 8, 18);
-            }
-          }
-        }
-      }
-    }
-
-    if (victoryMode) {
-      updateVictory(step);
-      updateParticles(step);
-      return;
-    }
-
-    // Buff timers
-    buffTick(robin, dt);
-    for (const r of runners) buffTick(r, dt);
-
-    // Respawns
-    for (const r of runners) {
-      if (!r.alive) {
         r.respawn -= dt;
-        if (r.respawn <= 0 && robin.alive) runnerRespawn(r);
-      }
-    }
 
-    if (robin.alive) robinAI(step);
+        if(r.respawn <= 0 && robin.alive){
 
-    for (const r of runners) {
-      if (!r.alive) continue;
-      if (r.invuln > 0) r.invuln -= dt;
-      updateRunnerAI(r, step);
-      runnerAttackAI(r, step);
-    }
+            r.alive = true;
 
-    updatePowerups(step);
-    updateProjectiles(step);
-    updateParticles(step);
+            r.hp = r.maxHp;
 
-    // Robin vs runners death check after projectiles.
-    if (robin.alive && robin.hp <= 0) {
-      robin.alive = false;
-      victoryMode = true;
-      victoryTimer = 6800;
-      burst(robin.x, robin.y, "#ffffff", 120, 7, 12, 32);
-      for (const r of runners) {
-        if (r.alive) {
-          r.dance = rand(0, 999);
-          burst(r.x, r.y, "#ffe36b", 14, 3.4, 8, 18);
+            r.immunity = 2000;
+
+            r.x = rand(100,canvas.width-100);
+            r.y = rand(100,canvas.height-100);
+
+            burst(r.x,r.y,"#66ffcc",35);
         }
-      }
-    }
-  }
 
-  function drawProjectile(p) {
-    ctx.save();
-    ctx.shadowColor = p.color;
-    ctx.shadowBlur = 18;
-    ctx.fillStyle = p.color;
-    ctx.strokeStyle = p.color;
-    ctx.lineWidth = 2;
-
-    if (p.kind === "bullet") {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 4.5, 0, TAU);
-      ctx.fill();
-    } else if (p.kind === "orb") {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 8, 0, TAU);
-      ctx.fill();
-      ctx.globalAlpha = 0.55;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 16, 0, TAU);
-      ctx.stroke();
-    } else if (p.kind === "bomb") {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 7.5, 0, TAU);
-      ctx.fill();
-      ctx.globalAlpha = 0.65;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 13, 0, TAU);
-      ctx.stroke();
+        return;
     }
 
-    ctx.restore();
-  }
+    r.immunity -= dt;
 
-  function drawRing(x, y, r, color, alpha = 1, width = 3) {
+    const dx = robin.x-r.x;
+    const dy = robin.y-r.y;
+
+    const d = Math.hypot(dx,dy);
+
+    const n = norm(dx,dy);
+
+    // movement personalities
+    let moveX = 0;
+    let moveY = 0;
+
+    // ---------- LEIF ----------
+    if(r.role === "berserker"){
+
+        r.slashCd -= dt;
+        r.leapCd -= dt;
+
+        // aggressive orbiting
+        if(d > 90){
+            moveX += n.x * 0.7;
+            moveY += n.y * 0.7;
+        }
+
+        moveX += -n.y * 0.3;
+        moveY += n.x * 0.3;
+
+        // slash
+        if(d < 95 && r.slashCd <= 0){
+
+            r.slashCd = 650;
+
+            damage(
+                robin,
+                11*r.damageBuff,
+                r.x,
+                r.y
+            );
+        }
+
+        // leap
+        if(d > 120 && d < 280 && r.leapCd <= 0){
+
+            r.leapCd = 4200;
+
+            r.vx += n.x * 8;
+            r.vy += n.y * 8;
+
+            damage(
+                robin,
+                22*r.damageBuff,
+                r.x,
+                r.y
+            );
+
+            burst(r.x,r.y,"#ffee55",18);
+        }
+    }
+
+    // ---------- LENNARD ----------
+    else if(r.role === "sniper"){
+
+        r.snipeCd -= dt;
+        r.panicShotCd -= dt;
+        r.dodgeCd -= dt;
+
+        // KEEP DISTANCE
+        if(d < 320){
+
+            moveX -= n.x * 1.2;
+            moveY -= n.y * 1.2;
+        }
+
+        moveX += -n.y * 0.18;
+        moveY += n.x * 0.18;
+
+        // LONG RANGE SHOT
+        if(d > 180 && r.snipeCd <= 0){
+
+            r.snipeCd = 550;
+
+            const angle = Math.atan2(dy,dx);
+
+            shoot(
+                r,
+                r.x,
+                r.y,
+                angle,
+                10,
+                8*r.damageBuff,
+                "#66ccff",
+                4
+            );
+        }
+
+        // HIGH RISK CLOSE SHOT
+        if(d < 120 && r.panicShotCd <= 0){
+
+            r.panicShotCd = 3200;
+
+            const angle = Math.atan2(dy,dx);
+
+            shoot(
+                r,
+                r.x,
+                r.y,
+                angle,
+                14,
+                32*r.damageBuff,
+                "#ffee55",
+                8,
+                "rail"
+            );
+
+            // dodge backwards
+            r.vx -= n.x * 10;
+            r.vy -= n.y * 10;
+
+            burst(r.x,r.y,"#ffee55",22);
+        }
+
+        // emergency dodge
+        if(d < 100 && r.dodgeCd <= 0){
+
+            r.dodgeCd = 2400;
+
+            r.vx -= n.x * 12;
+            r.vy -= n.y * 12;
+        }
+    }
+
+    // ---------- ERIM ----------
+    else if(r.role === "trickster"){
+
+        r.bombCd -= dt;
+        r.zapCd -= dt;
+
+        // medium range chaotic orbit
+        if(d > 170){
+            moveX += n.x * 0.5;
+            moveY += n.y * 0.5;
+        }
+
+        if(d < 130){
+            moveX -= n.x * 0.9;
+            moveY -= n.y * 0.9;
+        }
+
+        moveX += -n.y * 0.55;
+        moveY += n.x * 0.55;
+
+        // bomb
+        if(d > 120 && d < 340 && r.bombCd <= 0){
+
+            r.bombCd = 1700;
+
+            const angle = Math.atan2(dy,dx);
+
+            shoot(
+                r,
+                r.x,
+                r.y,
+                angle,
+                5,
+                18*r.damageBuff,
+                "#ff8888",
+                9,
+                "bomb"
+            );
+        }
+
+        // zap
+        if(d < 220 && r.zapCd <= 0){
+
+            r.zapCd = 500;
+
+            const angle = Math.atan2(dy,dx);
+
+            shoot(
+                r,
+                r.x,
+                r.y,
+                angle + rand(-0.15,0.15),
+                8,
+                6*r.damageBuff,
+                "#ffd166",
+                5
+            );
+        }
+    }
+
+    // avoid corners
+    const margin = 170;
+
+    if(r.x < margin) moveX += 1;
+    if(r.x > canvas.width-margin) moveX -= 1;
+
+    if(r.y < margin) moveY += 1;
+    if(r.y > canvas.height-margin) moveY -= 1;
+
+    // seek powerups if weak
+    if(r.hp < r.maxHp*0.55){
+
+        let nearest = null;
+        let nearestD = Infinity;
+
+        for(const p of powerups){
+
+            if(p.type !== "heal") continue;
+
+            const pd = dist(r,p);
+
+            if(pd < nearestD){
+
+                nearestD = pd;
+                nearest = p;
+            }
+        }
+
+        if(nearest){
+
+            const pdx = nearest.x-r.x;
+            const pdy = nearest.y-r.y;
+
+            const pn = norm(pdx,pdy);
+
+            moveX += pn.x * 1.3;
+            moveY += pn.y * 1.3;
+        }
+    }
+
+    // movement apply
+    r.vx += moveX * 0.12;
+    r.vy += moveY * 0.12;
+
+    r.vx *= 0.93;
+    r.vy *= 0.93;
+
+    r.x += r.vx * 2.2 * r.speedBuff;
+    r.y += r.vy * 2.2 * r.speedBuff;
+
+    r.x = clamp(r.x,30,canvas.width-30);
+    r.y = clamp(r.y,30,canvas.height-30);
+
+    // victory dance
+    if(!robin.alive){
+
+        r.dance += dt*0.01;
+
+        r.x += Math.sin(r.dance)*2;
+        r.y += Math.cos(r.dance*2)*2;
+    }
+}
+
+// ---------- PROJECTILES ----------
+function updateProjectiles(dt){
+
+    for(let i=projectiles.length-1;i>=0;i--){
+
+        const p = projectiles[i];
+
+        p.x += p.vx;
+        p.y += p.vy;
+
+        p.life -= dt;
+
+        // bomb explosion
+        if(p.type === "bomb" && p.life < 120){
+
+            burst(p.x,p.y,"#ff8888",20);
+
+            if(dist(p,robin) < 90){
+
+                damage(
+                    robin,
+                    p.damage,
+                    p.x,
+                    p.y
+                );
+            }
+
+            projectiles.splice(i,1);
+            continue;
+        }
+
+        // robin hit
+        if(p.owner !== robin && robin.alive){
+
+            if(dist(p,robin) < robin.size*0.45){
+
+                damage(
+                    robin,
+                    p.damage,
+                    p.x,
+                    p.y
+                );
+
+                projectiles.splice(i,1);
+                continue;
+            }
+        }
+
+        // player hit
+        if(p.owner === robin){
+
+            for(const r of runners){
+
+                if(!r.alive) continue;
+
+                if(dist(p,r) < r.size*0.45){
+
+                    damage(
+                        r,
+                        p.damage,
+                        p.x,
+                        p.y
+                    );
+
+                    projectiles.splice(i,1);
+                    break;
+                }
+            }
+        }
+
+        if(p.life <= 0){
+
+            projectiles.splice(i,1);
+        }
+    }
+}
+
+// ---------- POWERUPS ----------
+function updatePowerups(dt){
+
+    for(let i=powerups.length-1;i>=0;i--){
+
+        const p = powerups[i];
+
+        p.pulse += dt*0.004;
+
+        // robin collect
+        if(robin.alive && dist(robin,p) < 50){
+
+            applyPowerup(robin,p.type);
+
+            powerups.splice(i,1);
+            spawnPowerup();
+            continue;
+        }
+
+        // runners collect
+        for(const r of runners){
+
+            if(!r.alive) continue;
+
+            if(dist(r,p) < 35){
+
+                applyPowerup(r,p.type);
+
+                powerups.splice(i,1);
+
+                spawnPowerup();
+
+                break;
+            }
+        }
+    }
+}
+
+function applyPowerup(entity,type){
+
+    if(type === "heal"){
+
+        heal(entity,entity.maxHp*0.3);
+
+        textPop(entity.x,entity.y,"+HP","#66ff99");
+    }
+
+    if(type === "speed"){
+
+        entity.speedBuff = 1.35;
+
+        setTimeout(()=>{
+            entity.speedBuff = 1;
+        },7000);
+
+        textPop(entity.x,entity.y,"SPD","#66ccff");
+    }
+
+    if(type === "damage"){
+
+        entity.damageBuff = 1.5;
+
+        setTimeout(()=>{
+            entity.damageBuff = 1;
+        },7000);
+
+        textPop(entity.x,entity.y,"DMG","#ff6666");
+    }
+
+    if(type === "shield"){
+
+        entity.shield = Math.min(40, entity.shield + 20);
+
+        textPop(entity.x,entity.y,"SHIELD","#bb66ff");
+    }
+}
+
+// ---------- PARTICLES ----------
+function updateParticles(dt){
+
+    for(let i=particles.length-1;i>=0;i--){
+
+        const p = particles[i];
+
+        p.x += p.vx;
+        p.y += p.vy;
+
+        p.vx *= 0.97;
+        p.vy *= 0.97;
+
+        p.life--;
+
+        if(p.life <= 0){
+            particles.splice(i,1);
+        }
+    }
+
+    for(let i=texts.length-1;i>=0;i--){
+
+        const t = texts[i];
+
+        t.y += t.vy;
+
+        t.life--;
+
+        if(t.life <= 0){
+            texts.splice(i,1);
+        }
+    }
+}
+
+// ---------- DRAW ----------
+function drawArena(){
+
+    const t = performance.now()*0.015;
+
+    ctx.strokeStyle = "rgba(255,255,255,0.04)";
+
+    for(let x=-50;x<canvas.width+50;x+=50){
+
+        ctx.beginPath();
+        ctx.moveTo(x+(t%50),0);
+        ctx.lineTo(x+(t%50),canvas.height);
+        ctx.stroke();
+    }
+
+    for(let y=-50;y<canvas.height+50;y+=50){
+
+        ctx.beginPath();
+        ctx.moveTo(0,y+(t%50));
+        ctx.lineTo(canvas.width,y+(t%50));
+        ctx.stroke();
+    }
+}
+
+function drawImage(img,x,y,size,glow,alpha=1,rot=0){
+
     ctx.save();
+
+    ctx.translate(x,y);
+    ctx.rotate(rot);
+
     ctx.globalAlpha = alpha;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = width;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, TAU);
-    ctx.stroke();
-    ctx.restore();
-  }
 
-  function draw() {
-    ctx.clearRect(0, 0, W(), H());
+    ctx.shadowColor = glow;
+    ctx.shadowBlur = 25;
 
-    drawArenaGrid();
-
-    // Powerups first
-    for (const p of powerups) drawPowerup(p);
-
-    // Projectiles
-    for (const p of projectiles) drawProjectile(p);
-
-    // Particles
-    for (const p of particles) {
-      ctx.save();
-      ctx.globalAlpha = clamp(p.life / p.maxLife, 0, 1);
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, TAU);
-      ctx.fill();
-      ctx.restore();
-    }
-
-    // Robin slam telegraph ring
-    if (robin.alive && robin.state === "slam") {
-      const pulse = 130 + Math.sin(performance.now() * 0.04) * 10;
-      drawRing(robin.x, robin.y, pulse, "rgba(255,90,90,0.9)", 0.8, 4);
-    }
-
-    // Robin
-    if (robin.alive) {
-      const pulse = Math.sin(performance.now() * 0.008) * 4;
-      const alpha = robin.invuln > 0 ? 0.70 + Math.sin(performance.now() * 0.02) * 0.18 : 1;
-      drawEntity(robin, "robin", "#ff5050", {
-        alpha,
-        sizeMul: (robin.state === "dash" ? 1.03 : 1) + pulse * 0.01,
-        glow: "#ff5555",
-        rotate: robin.facing * 0.03
-      });
-
-      // status rings
-      if (robin.shield > 0) drawRing(robin.x, robin.y, robin.size * 0.58, "rgba(194,102,255,0.70)", 0.75, 4);
-      if (robin.state === "dash") drawRing(robin.x, robin.y, robin.size * 0.82, "rgba(255,255,255,0.55)", 0.55, 2);
-
-      drawBars(robin, "#c266ff", "#ff5b5b", `Robin  HP:${Math.max(0, Math.round(robin.hp))}`);
-    } else {
-      const spin = performance.now() * 0.0018;
-      drawEntity(robin, "robin", "#cccccc", {
-        alpha: 0.28,
-        glow: "#ffffff",
-        rotate: spin
-      });
-      ctx.save();
-      ctx.fillStyle = "#fff";
-      ctx.font = "bold 38px Arial";
-      ctx.textAlign = "center";
-      ctx.fillText("ROBIN DEFEATED", W() / 2, 74);
-      ctx.restore();
-    }
-
-    // Runners
-    for (const r of runners) {
-      if (!r.alive) continue;
-
-      const a = r.invuln > 0 ? 0.52 + Math.sin(performance.now() * 0.02) * 0.26 : 1;
-      const sizeBoost = r.role === "brawler" ? 1.02 : r.role === "sniper" ? 0.99 : 1.0;
-
-      const color = r.role === "brawler" ? "#66ffcc" : r.role === "sniper" ? "#66ccff" : "#ffd166";
-
-      drawEntity(r, r.name, color, {
-        alpha: a,
-        sizeMul: sizeBoost,
-        glow: r.invuln > 0 ? "#66ffcc" : color,
-        rotate: r.facing * 0.03
-      });
-
-      // buffs / roles
-      if (r.shield > 0) drawRing(r.x, r.y, r.size * 0.55, "rgba(194,102,255,0.62)", 0.7, 3);
-      if (r.role === "brawler" && dist(r, robin) < 130 && robin.alive) drawRing(r.x, r.y, 34, "rgba(255,120,120,0.23)", 0.35, 2);
-      if (r.role === "sniper") drawRing(r.x, r.y, 44, "rgba(102,204,255,0.20)", 0.22, 2);
-
-      drawBars(r, "#c266ff", "#66ff99", `${r.name}  HP:${Math.max(0, Math.round(r.hp))}`);
-    }
-
-    // Victory dance flair
-    if (!robin.alive) {
-      ctx.save();
-      ctx.globalAlpha = 0.9;
-      ctx.fillStyle = "#fff";
-      ctx.font = "bold 34px Arial";
-      ctx.textAlign = "center";
-      ctx.fillText("RUNNERS WIN!", W() / 2, 120);
-      ctx.fillStyle = "rgba(255,255,255,0.75)";
-      ctx.font = "18px Arial";
-      ctx.fillText("Celebration mode engaged.", W() / 2, 148);
-      ctx.restore();
-    }
-
-    // Floating text last
-    for (const t of damageTexts) {
-      const alpha = clamp(t.life / t.maxLife, 0, 1);
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = t.color;
-      ctx.font = "bold 17px Arial";
-      ctx.textAlign = "center";
-      ctx.fillText(t.text, t.x, t.y);
-      ctx.restore();
-    }
-
-    // tiny footer state
-    ctx.save();
-    ctx.globalAlpha = 0.8;
-    ctx.fillStyle = "rgba(255,255,255,0.7)";
-    ctx.font = "12px Arial";
-    ctx.textAlign = "right";
-    ctx.fillText(
-      `Powerups: ${powerups.length}  |  Projectiles: ${projectiles.length}  |  Round ${Math.max(1, Math.floor(roundTimer / 1000))}s`,
-      W() - 12,
-      H() - 12
+    ctx.drawImage(
+        img,
+        -size/2,
+        -size/2,
+        size,
+        size
     );
+
     ctx.restore();
-  }
+}
 
-  let last = performance.now();
-  function loop(now) {
-    const dt = Math.min(34, now - last);
+function drawHealth(entity,color){
+
+    ctx.fillStyle = "#000";
+
+    ctx.fillRect(
+        entity.x-25,
+        entity.y-entity.size/2-16,
+        50,
+        6
+    );
+
+    ctx.fillStyle = color;
+
+    ctx.fillRect(
+        entity.x-25,
+        entity.y-entity.size/2-16,
+        50*(entity.hp/entity.maxHp),
+        6
+    );
+}
+
+function render(){
+
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    drawArena();
+
+    // powerups
+    for(const p of powerups){
+
+        let color = "#66ccff";
+
+        if(p.type==="heal") color="#66ff99";
+        if(p.type==="damage") color="#ff6666";
+        if(p.type==="shield") color="#bb66ff";
+
+        ctx.beginPath();
+
+        ctx.fillStyle = color;
+
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 20;
+
+        ctx.arc(
+            p.x,
+            p.y,
+            12+Math.sin(p.pulse)*2,
+            0,
+            Math.PI*2
+        );
+
+        ctx.fill();
+    }
+
+    // particles
+    for(const p of particles){
+
+        ctx.globalAlpha = p.life/45;
+
+        ctx.fillStyle = p.color;
+
+        ctx.beginPath();
+        ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
+        ctx.fill();
+    }
+
+    ctx.globalAlpha = 1;
+
+    // projectiles
+    for(const p of projectiles){
+
+        ctx.beginPath();
+
+        ctx.fillStyle = p.color;
+
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 16;
+
+        ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
+
+        ctx.fill();
+    }
+
+    // robin
+    if(robin.alive){
+
+        drawImage(
+            imgs.robin,
+            robin.x,
+            robin.y,
+            robin.size,
+            "#ff4444",
+            1,
+            robin.facing*0.08
+        );
+
+        drawHealth(robin,"#ff5555");
+
+    } else {
+
+        drawImage(
+            imgs.robin,
+            robin.x,
+            robin.y,
+            robin.size,
+            "#ffffff",
+            0.3,
+            performance.now()*0.001
+        );
+
+        ctx.fillStyle = "white";
+        ctx.font = "bold 40px Arial";
+
+        ctx.fillText(
+            "ROBIN DEFEATED",
+            canvas.width/2-170,
+            80
+        );
+    }
+
+    // runners
+    for(const r of runners){
+
+        if(!r.alive) continue;
+
+        let glow = "#66aaff";
+
+        if(r.role==="berserker") glow="#66ff99";
+        if(r.role==="sniper") glow="#66ccff";
+        if(r.role==="trickster") glow="#ffd166";
+
+        drawImage(
+            imgs[r.name],
+            r.x,
+            r.y,
+            r.size,
+            glow,
+            r.immunity > 0
+                ? 0.5 + Math.sin(performance.now()*0.02)*0.3
+                : 1,
+            Math.sin(performance.now()*0.002+r.x)*0.05
+        );
+
+        drawHealth(r,"#66ff99");
+
+        // victory dance rings
+        if(!robin.alive){
+
+            ctx.strokeStyle =
+                `hsla(${(performance.now()*0.08+r.x)%360},100%,70%,0.7)`;
+
+            ctx.beginPath();
+
+            ctx.arc(
+                r.x,
+                r.y,
+                32+Math.sin(r.dance*4)*8,
+                0,
+                Math.PI*2
+            );
+
+            ctx.stroke();
+        }
+    }
+
+    // floating texts
+    for(const t of texts){
+
+        ctx.globalAlpha = t.life/60;
+
+        ctx.fillStyle = t.color;
+
+        ctx.font = "bold 16px Arial";
+
+        ctx.fillText(t.text,t.x,t.y);
+    }
+
+    ctx.globalAlpha = 1;
+}
+
+// ---------- LOOP ----------
+let last = performance.now();
+
+function loop(now){
+
+    const dt = now-last;
     last = now;
-    update(dt);
-    draw();
-    requestAnimationFrame(loop);
-  }
 
-  requestAnimationFrame(loop);
-})();
+    updateRobin(dt);
+
+    for(const r of runners){
+        updateRunner(r,dt);
+    }
+
+    updateProjectiles(dt);
+    updatePowerups(dt);
+    updateParticles(dt);
+
+    render();
+
+    requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(loop);
+
 </script>
 </body>
 </html>
