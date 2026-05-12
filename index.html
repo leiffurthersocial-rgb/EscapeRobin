@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Robin Arena – Balanced Tactical</title>
+    <title>Robin Arena – Playable</title>
     <style>
         html, body {
             margin: 0;
@@ -104,7 +104,6 @@
     <div id="ui-layer">
         <button id="settings-btn" class="ui-btn">⚙️ Settings</button>
     </div>
-
     <div id="settings-panel">
         <h3>⚙️ Settings</h3>
         <div class="setting-row">
@@ -159,6 +158,14 @@
         // Chat messages (fade out)
         const chatMessages = [];
 
+        // ---------- MOUSE & KEYBOARD STATE ----------
+        let mouse = { x: canvas.width/2, y: canvas.height/2 };
+        let keys = {};
+        let abilityTriggered = { q: false, e: false, r: false, f: false }; // edge triggers
+
+        // Player control
+        let controlledChar = null; // reference to robin or a runner
+
         // ---------- UI ELEMENTS ----------
         const settingsBtn = document.getElementById("settings-btn");
         const settingsPanel = document.getElementById("settings-panel");
@@ -178,18 +185,33 @@
             infToggleBtn.innerText = infiniteMode ? "ON" : "OFF";
             if (infiniteMode && !robin.alive) respawnRobin();
         });
-
         shakeToggleBtn.addEventListener("click", () => {
             cameraShakeOn = !cameraShakeOn;
             shakeToggleBtn.classList.toggle("active", cameraShakeOn);
             shakeToggleBtn.innerText = cameraShakeOn ? "ON" : "OFF";
         });
-
         bgSelect.addEventListener("change", () => { backgroundStyle = bgSelect.value; });
-
         speedSlider.addEventListener("input", () => {
             gameSpeed = parseFloat(speedSlider.value);
             speedValue.innerText = gameSpeed.toFixed(1) + "x";
+        });
+
+        // ---------- CANVAS MOUSE/KEY EVENTS ----------
+        canvas.addEventListener("mousemove", (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouse.x = e.clientX - rect.left;
+            mouse.y = e.clientY - rect.top;
+        });
+        window.addEventListener("keydown", (e) => {
+            keys[e.key.toLowerCase()] = true;
+            // Edge trigger for abilities (only on first press)
+            if (e.key.toLowerCase() === 'q' && !e.repeat) abilityTriggered.q = true;
+            if (e.key.toLowerCase() === 'e' && !e.repeat) abilityTriggered.e = true;
+            if (e.key.toLowerCase() === 'r' && !e.repeat) abilityTriggered.r = true;
+            if (e.key.toLowerCase() === 'f' && !e.repeat) abilityTriggered.f = true;
+        });
+        window.addEventListener("keyup", (e) => {
+            keys[e.key.toLowerCase()] = false;
         });
 
         // ---------- HELPER FUNCTIONS ----------
@@ -230,10 +252,11 @@
 
         // ---------- ENTITIES ----------
         const robin = {
+            type: "robin",
             x: canvas.width / 2, y: canvas.height / 2,
             vx: 0, vy: 0,
             size: 88,
-            hp: 300, maxHp: 300, ghostHp: 300,  // buffed
+            hp: 300, maxHp: 300, ghostHp: 300,
             alive: true,
             immunity: 0,
             facing: 0,
@@ -245,7 +268,7 @@
 
         const runners = [
             {
-                name: "leif", role: "midrange",
+                type: "leif", role: "midrange",
                 x: 300, y: 300, vx: 0, vy: 0,
                 hp: 88, maxHp: 88, ghostHp: 88,
                 size: 44, alive: true, immunity: 2000,
@@ -254,23 +277,23 @@
                 damageBuff: 1, speedBuff: 1, dance: 0
             },
             {
-                name: "lennard", role: "sniper",
+                type: "lennard", role: "sniper",
                 x: 900, y: 500, vx: 0, vy: 0,
-                hp: 60, maxHp: 60, ghostHp: 60,  // lower HP
+                hp: 60, maxHp: 60, ghostHp: 60,
                 size: 42, alive: true, immunity: 2000,
                 snipeCd: 0, panicShotCd: 0, dodgeCd: 0, vanishCd: 0, blinkCd: 0,
                 damageBuff: 1, speedBuff: 1, dance: 0,
                 invisible: false, invisTimer: 0,
-                panicIndicator: null  // skillshot
+                panicIndicator: null
             },
             {
-                name: "erim", role: "healer",
+                type: "erim", role: "healer",
                 x: 700, y: 700, vx: 0, vy: 0,
                 hp: 120, maxHp: 120, ghostHp: 120,
                 size: 46, alive: true, immunity: 2000,
                 bashCd: 0, healAuraCd: 0, shieldAllyCd: 0, smashCd: 0,
                 healAuraActive: false, healAuraTimer: 0,
-                smashIndicator: null,   // skillshot
+                smashIndicator: null,
                 damageBuff: 1, speedBuff: 1, dance: 0
             }
         ];
@@ -375,11 +398,13 @@
                     target.alive = false;
                     target.respawn = rand(8000, 13000);
                     pDeaths++;
-                    if (target.name === "leif") leifDeaths++;
-                    if (target.name === "lennard") lennardDeaths++;
-                    if (target.name === "erim") erimDeaths++;
+                    if (target.name) {
+                        if (target.name === "leif") leifDeaths++;
+                        if (target.name === "lennard") lennardDeaths++;
+                        if (target.name === "erim") erimDeaths++;
+                    }
                     burst(target.x, target.y, "#ff2222", 45);
-                    addChat(`${target.name.toUpperCase()} down!`);
+                    addChat(`${target.type ? target.type.toUpperCase() : 'Unknown'} down!`);
                 }
             }
         }
@@ -398,13 +423,12 @@
             });
         }
 
-        // ---------- SKILLSHOT INDICATOR ----------
         function addSkillshot(x, y, radius, color, duration) {
             skillshots.push({ x, y, radius, color, life: duration, maxLife: duration });
         }
 
-        // ---------- ROBIN AI (stronger) ----------
-        function updateRobin(dt) {
+        // ========== AI UPDATES (unchanged except controlledChar check) ==========
+        function updateRobinAI(dt) {
             if (!robin.alive) return;
             robin.immunity -= dt;
             robin.slashCd -= dt;
@@ -501,8 +525,7 @@
             }
         }
 
-        // ---------- RUNNER AI (nerfed Lennard, improved Erim/Leif) ----------
-        function updateRunner(r, dt) {
+        function updateRunnerAI(r, dt) {
             if (!r.alive) {
                 r.respawn -= dt;
                 if (r.respawn <= 0 && robin.alive) {
@@ -513,7 +536,7 @@
                     r.x = rand(150, canvas.width - 150);
                     r.y = rand(150, canvas.height - 150);
                     burst(r.x, r.y, "#66ffcc", 35);
-                    addChat(`${r.name} respawned.`);
+                    addChat(`${r.type} respawned.`);
                 }
                 return;
             }
@@ -527,27 +550,15 @@
             const dx = robin.x - r.x, dy = robin.y - r.y;
             const d = Math.hypot(dx, dy);
             const n = norm(dx, dy);
-
-            const healer = runners.find(b => b.role === "healer");
             const selfLow = r.hp < r.maxHp * 0.45;
             let moveX = 0, moveY = 0;
 
-            // ---------- LEIF (mid‑range, charged kunai) ----------
             if (r.role === "midrange") {
-                r.kunaiCd -= dt;
-                r.zapCd -= dt;
-                r.evadeCd -= dt;
-                r.chargeCd -= dt;
-
-                // Charged attack indicator
+                r.kunaiCd -= dt; r.zapCd -= dt; r.evadeCd -= dt; r.chargeCd -= dt;
                 if (r.charging) {
                     r.chargeTimer -= dt;
-                    // show indicator around leif
-                    addSkillshot(r.x, r.y, 40, "rgba(255,100,0,0.6)", 0.1);
                     if (r.chargeTimer <= 0) {
-                        r.charging = false;
-                        r.chargeCd = 8000;
-                        // fire powerful bolt
+                        r.charging = false; r.chargeCd = 8000;
                         if (r.chargeTarget && r.chargeTarget.alive) {
                             const angle = Math.atan2(r.chargeTarget.y - r.y, r.chargeTarget.x - r.x);
                             shoot(r, r.x, r.y, angle, 12, 25, "#ff5500", 7, "charged");
@@ -556,12 +567,9 @@
                         }
                     }
                 } else if (d > 160 && d < 400 && r.chargeCd <= 0 && robin.alive) {
-                    r.charging = true;
-                    r.chargeTimer = 800;
-                    r.chargeTarget = robin;
+                    r.charging = true; r.chargeTimer = 800; r.chargeTarget = robin;
                     addSkillshot(r.x, r.y, 50, "rgba(255,100,0,0.3)", 800);
                 }
-
                 if (d > 210) { moveX += n.x * 0.7; moveY += n.y * 0.7; }
                 else if (d < 140) { moveX -= n.x * 0.9; moveY -= n.y * 0.9; }
                 moveX += -n.y * 0.25; moveY += n.x * 0.25;
@@ -574,48 +582,31 @@
                     }
                     addChat("Leif KUNAI VOLLEY");
                 }
-
                 if (d < 260 && r.zapCd <= 0) {
                     r.zapCd = 450;
                     shoot(r, r.x, r.y, Math.atan2(dy, dx) + rand(-0.08, 0.08), 8.5, 11, "#ffd166", 4);
                 }
-
                 if (d < 150 && r.evadeCd <= 0) {
                     r.evadeCd = 2200;
-                    r.vx -= n.x * 9;
-                    r.vy -= n.y * 9;
+                    r.vx -= n.x * 9; r.vy -= n.y * 9;
                     burst(r.x, r.y, "#ffaa66", 10);
                 }
-            }
-            // ---------- LENNARD (nerfed sniper) ----------
-            else if (r.role === "sniper") {
-                r.snipeCd -= dt;
-                r.panicShotCd -= dt;
-                r.dodgeCd -= dt;
-                r.vanishCd -= dt;
-                r.blinkCd -= dt;
-
-                // Vanish (long cooldown)
+            } else if (r.role === "sniper") {
+                r.snipeCd -= dt; r.panicShotCd -= dt; r.dodgeCd -= dt; r.vanishCd -= dt; r.blinkCd -= dt;
                 if (d < 150 && r.vanishCd <= 0 && !r.invisible) {
-                    r.invisible = true;
-                    r.invisTimer = 1500; // shorter
-                    r.vanishCd = 30000;   // 30s cooldown
+                    r.invisible = true; r.invisTimer = 1500; r.vanishCd = 30000;
                     addChat("Lennard VANISHED");
                     textPop(r.x, r.y - 30, "VANISH!", "#aaaaff");
                 }
-                // Blink (longer cooldown)
                 if (d < 120 && r.blinkCd <= 0 && !r.invisible) {
                     r.blinkCd = 18000;
                     const angle = Math.atan2(r.y - robin.y, r.x - robin.x) + rand(-0.5, 0.5);
                     r.x += Math.cos(angle) * 180;
                     r.y += Math.sin(angle) * 180;
-                    r.x = clamp(r.x, 80, canvas.width - 80);
-                    r.y = clamp(r.y, 80, canvas.height - 80);
+                    r.x = clamp(r.x, 80, canvas.width - 80); r.y = clamp(r.y, 80, canvas.height - 80);
                     burst(r.x, r.y, "#aaaaff", 20);
                     addChat("Lennard BLINKED");
                 }
-
-                // Panic shot indicator
                 if (d < 130 && r.panicShotCd <= 0 && !r.invisible && !r.panicIndicator) {
                     r.panicIndicator = { timer: 350, target: robin };
                     addSkillshot(r.x, r.y, 0, "rgba(255,255,0,0.6)", 350);
@@ -633,33 +624,20 @@
                         r.panicIndicator = null;
                     }
                 }
-
                 if ((selfLow || r.hp < r.maxHp * 0.5) && !r.invisible) {
-                    moveX -= n.x * 1.9;
-                    moveY -= n.y * 1.9;
-                } else if (d < 320 && !r.invisible) {
-                    moveX -= n.x * 1.3;
-                    moveY -= n.y * 1.3;
-                }
+                    moveX -= n.x * 1.9; moveY -= n.y * 1.9;
+                } else if (d < 320 && !r.invisible) { moveX -= n.x * 1.3; moveY -= n.y * 1.3; }
                 moveX += -n.y * 0.15; moveY += n.x * 0.15;
-
                 if (d > 190 && r.snipeCd <= 0) {
                     r.snipeCd = 600;
-                    shoot(r, r.x, r.y, Math.atan2(dy, dx), 10.5, 5, "#66ccff", 4); // less damage
+                    shoot(r, r.x, r.y, Math.atan2(dy, dx), 10.5, 5, "#66ccff", 4);
                 }
                 if (d < 100 && r.dodgeCd <= 0 && !r.invisible) {
                     r.dodgeCd = 2200;
                     r.vx -= n.x * 13; r.vy -= n.y * 13;
                 }
-            }
-            // ---------- ERIM (offensive healer/tank) ----------
-            else if (r.role === "healer") {
-                r.bashCd -= dt;
-                r.healAuraCd -= dt;
-                r.shieldAllyCd -= dt;
-                r.smashCd -= dt;
-
-                // Healing aura
+            } else if (r.role === "healer") {
+                r.bashCd -= dt; r.healAuraCd -= dt; r.shieldAllyCd -= dt; r.smashCd -= dt;
                 if (r.healAuraActive) {
                     r.healAuraTimer -= dt;
                     if (Math.floor(performance.now() / 250) % 2 === 0) {
@@ -669,42 +647,26 @@
                         }
                         heal(r, 3);
                     }
-                    if (r.healAuraTimer <= 0) {
-                        r.healAuraActive = false;
-                        r.healAuraCd = 11000;
-                        burst(r.x, r.y, "#88ff88", 30);
-                        addChat("Erim healing aura ended");
-                    }
+                    if (r.healAuraTimer <= 0) { r.healAuraActive = false; r.healAuraCd = 11000; burst(r.x, r.y, "#88ff88", 30); addChat("Erim healing aura ended"); }
                 } else {
                     const lowAllies = runners.filter(a => a.alive && a !== r && a.hp < a.maxHp * 0.5);
                     if ((lowAllies.length >= 2 || selfLow) && r.healAuraCd <= 0) {
-                        r.healAuraActive = true;
-                        r.healAuraTimer = 4000;
-                        r.healAuraCd = 11000;
-                        burst(r.x, r.y, "#88ff88", 50);
-                        addChat("Erim HEALING AURA");
+                        r.healAuraActive = true; r.healAuraTimer = 4000; r.healAuraCd = 11000; burst(r.x, r.y, "#88ff88", 50); addChat("Erim HEALING AURA");
                     }
                 }
-
-                // Shield ally
                 if (r.shieldAllyCd <= 0) {
                     let target = null, lowestHp = Infinity;
                     for (const ally of runners) {
                         if (!ally.alive || ally === r) continue;
-                        if (ally.hp < lowestHp && ally.shield < 20) {
-                            lowestHp = ally.hp;
-                            target = ally;
-                        }
+                        if (ally.hp < lowestHp && ally.shield < 20) { lowestHp = ally.hp; target = ally; }
                     }
                     if (target) {
                         r.shieldAllyCd = 12000;
                         target.shield = Math.min(40, target.shield + 30);
                         textPop(target.x, target.y - 30, "PROTECTED", "#bb66ff");
-                        addChat(`Erim shielded ${target.name}`);
+                        addChat(`Erim shielded ${target.type}`);
                     }
                 }
-
-                // Earth Smash (offensive AoE)
                 if (d < 140 && r.smashCd <= 0 && !r.smashIndicator) {
                     r.smashIndicator = { timer: 600, x: r.x, y: r.y };
                     addSkillshot(r.x, r.y, 0, "rgba(139,69,19,0.5)", 600);
@@ -717,54 +679,32 @@
                         for (const enemy of [robin]) {
                             if (enemy.alive && dist({x:sx,y:sy}, enemy) < 120) damage(enemy, 18, sx, sy);
                         }
-                        burst(sx, sy, "#8B4513", 30);
-                        addShake(5);
-                        addChat("Erim EARTH SMASH");
-                        r.smashIndicator = null;
+                        burst(sx, sy, "#8B4513", 30); addShake(5); addChat("Erim EARTH SMASH"); r.smashIndicator = null;
                     }
                 }
-
                 if (selfLow) {
                     const nearestAlly = runners.filter(a => a.alive && a !== r).sort((a,b)=>dist(r,a)-dist(r,b))[0];
-                    if (nearestAlly) {
-                        const an = norm(nearestAlly.x - r.x, nearestAlly.y - r.y);
-                        moveX += an.x * 1.2;
-                        moveY += an.y * 1.2;
-                    } else {
-                        moveX -= n.x * 1.0;
-                        moveY -= n.y * 1.0;
-                    }
+                    if (nearestAlly) { const an = norm(nearestAlly.x - r.x, nearestAlly.y - r.y); moveX += an.x * 1.2; moveY += an.y * 1.2; }
+                    else { moveX -= n.x * 1.0; moveY -= n.y * 1.0; }
                 } else {
                     if (d > 110) { moveX += n.x * 0.6; moveY += n.y * 0.6; }
                     moveX += -n.y * 0.25; moveY += n.x * 0.25;
                 }
-
-                if (d < 90 && r.bashCd <= 0) {
-                    r.bashCd = 800;
-                    damage(robin, 10, r.x, r.y);
-                }
+                if (d < 90 && r.bashCd <= 0) { r.bashCd = 800; damage(robin, 10, r.x, r.y); }
             }
 
-            // Boundaries
             const margin = 250;
             if (r.x < margin) moveX += 1.2;
             if (r.x > canvas.width - margin) moveX -= 1.2;
             if (r.y < margin) moveY += 1.2;
             if (r.y > canvas.height - margin) moveY -= 1.2;
-
             if (r.hp < r.maxHp * 0.6) {
                 const healP = getNearestPowerup(r, "heal", 300);
-                if (healP) {
-                    const pn = norm(healP.x - r.x, healP.y - r.y);
-                    moveX += pn.x * 1.5;
-                    moveY += pn.y * 1.5;
-                }
+                if (healP) { const pn = norm(healP.x - r.x, healP.y - r.y); moveX += pn.x * 1.5; moveY += pn.y * 1.5; }
             }
-
             r.vx += moveX * 0.13;
             r.vy += moveY * 0.13;
-            r.vx *= 0.93;
-            r.vy *= 0.93;
+            r.vx *= 0.93; r.vy *= 0.93;
             r.x += r.vx * 2.3 * r.speedBuff;
             r.y += r.vy * 2.3 * r.speedBuff;
             r.x = clamp(r.x, 40, canvas.width - 40);
@@ -777,7 +717,245 @@
             }
         }
 
-        // ---------- PROJECTILES ----------
+        // ========== PLAYER CONTROL ==========
+        function updatePlayerControl(entity, dt) {
+            if (!entity.alive) return;
+
+            // Movement
+            let moveX = 0, moveY = 0;
+            if (keys['w'] || keys['arrowup']) moveY -= 1;
+            if (keys['s'] || keys['arrowdown']) moveY += 1;
+            if (keys['a'] || keys['arrowleft']) moveX -= 1;
+            if (keys['d'] || keys['arrowright']) moveX += 1;
+
+            // Facing towards mouse
+            const angle = Math.atan2(mouse.y - entity.y, mouse.x - entity.x);
+            entity.facing = angle;
+
+            // Movement physics
+            if (moveX !== 0 || moveY !== 0) {
+                const n = norm(moveX, moveY);
+                entity.vx += n.x * 0.2;
+                entity.vy += n.y * 0.2;
+            }
+            entity.vx *= 0.93;
+            entity.vy *= 0.93;
+            entity.x += entity.vx * 2.3 * entity.speedBuff;
+            entity.y += entity.vy * 2.3 * entity.speedBuff;
+            entity.x = clamp(entity.x, 100, canvas.width - 100);
+            entity.y = clamp(entity.y, 100, canvas.height - 100);
+
+            // Cooldowns decrement
+            if (entity === robin) {
+                entity.slashCd -= dt; entity.orbCd -= dt; entity.dashCd -= dt; entity.slamCd -= dt;
+            } else if (entity.role === "midrange") {
+                entity.kunaiCd -= dt; entity.zapCd -= dt; entity.evadeCd -= dt; entity.chargeCd -= dt;
+            } else if (entity.role === "sniper") {
+                entity.snipeCd -= dt; entity.panicShotCd -= dt; entity.dodgeCd -= dt; entity.vanishCd -= dt; entity.blinkCd -= dt;
+            } else if (entity.role === "healer") {
+                entity.bashCd -= dt; entity.healAuraCd -= dt; entity.shieldAllyCd -= dt; entity.smashCd -= dt;
+            }
+
+            // Abilities via Q/E/R/F trigger
+            if (entity === robin) {
+                if (abilityTriggered.q && entity.slashCd <= 0) {
+                    entity.slashCd = 600;
+                    // slash in facing direction (melee area)
+                    for (const r of runners) {
+                        if (!r.alive || r.invisible) continue;
+                        if (dist(entity, r) < entity.size/2 + r.size/2 + 30) damage(r, 20, entity.x, entity.y);
+                    }
+                    addChat("Robin SLASH");
+                    abilityTriggered.q = false;
+                }
+                if (abilityTriggered.e && entity.orbCd <= 0) {
+                    entity.orbCd = 2200;
+                    for (let i = -1; i <= 1; i++) {
+                        shoot(entity, entity.x, entity.y, entity.facing + i * 0.15, 6.5, 14, "#ff6666", 7, "orb");
+                    }
+                    addChat("Robin ORBS");
+                    abilityTriggered.e = false;
+                }
+                if (abilityTriggered.r && entity.dashCd <= 0) {
+                    entity.dashCd = 3600;
+                    const n = norm(Math.cos(entity.facing), Math.sin(entity.facing));
+                    entity.vx += n.x * 10;
+                    entity.vy += n.y * 10;
+                    for (const r of runners) {
+                        if (!r.alive || r.invisible) continue;
+                        if (dist(entity, r) < 80) damage(r, 24, entity.x, entity.y);
+                    }
+                    addChat("Robin DASH");
+                    addShake(6);
+                    abilityTriggered.r = false;
+                }
+                if (abilityTriggered.f && entity.slamCd <= 0 && !entity.slamTelegraph) {
+                    entity.slamCd = 8500;
+                    entity.slamTelegraph = { remaining: 950, total: 950, x: entity.x, y: entity.y };
+                    addSkillshot(entity.x, entity.y, 0, "rgba(255,0,0,0.3)", 950);
+                    addChat("Robin winding up SLAM...");
+                    abilityTriggered.f = false;
+                }
+            } else if (entity.role === "midrange") {
+                if (abilityTriggered.q && entity.kunaiCd <= 0) {
+                    entity.kunaiCd = 900;
+                    for (let i = -1; i <= 1; i++) {
+                        shoot(entity, entity.x, entity.y, entity.facing + i * 0.2, 9, 9, "#ffaa66", 4, "kunai");
+                    }
+                    addChat("Leif KUNAI VOLLEY");
+                    abilityTriggered.q = false;
+                }
+                if (abilityTriggered.e && entity.zapCd <= 0) {
+                    entity.zapCd = 450;
+                    shoot(entity, entity.x, entity.y, entity.facing + rand(-0.05,0.05), 8.5, 11, "#ffd166", 4);
+                    abilityTriggered.e = false;
+                }
+                if (abilityTriggered.r && entity.evadeCd <= 0) {
+                    entity.evadeCd = 2200;
+                    const backAngle = entity.facing + Math.PI;
+                    entity.vx += Math.cos(backAngle) * 9;
+                    entity.vy += Math.sin(backAngle) * 9;
+                    burst(entity.x, entity.y, "#ffaa66", 10);
+                    abilityTriggered.r = false;
+                }
+                if (abilityTriggered.f && entity.chargeCd <= 0 && !entity.charging) {
+                    entity.charging = true; entity.chargeTimer = 800; entity.chargeTarget = robin;
+                    addSkillshot(entity.x, entity.y, 50, "rgba(255,100,0,0.3)", 800);
+                    abilityTriggered.f = false;
+                }
+            } else if (entity.role === "sniper") {
+                if (abilityTriggered.q && entity.snipeCd <= 0) {
+                    entity.snipeCd = 600;
+                    shoot(entity, entity.x, entity.y, entity.facing, 10.5, 5, "#66ccff", 4);
+                    abilityTriggered.q = false;
+                }
+                if (abilityTriggered.e && entity.panicShotCd <= 0 && !entity.panicIndicator && !entity.invisible) {
+                    entity.panicIndicator = { timer: 350, target: robin };
+                    addSkillshot(entity.x, entity.y, 0, "rgba(255,255,0,0.6)", 350);
+                    abilityTriggered.e = false;
+                }
+                if (abilityTriggered.r && entity.dodgeCd <= 0 && !entity.invisible) {
+                    entity.dodgeCd = 2200;
+                    const backAngle = entity.facing + Math.PI;
+                    entity.vx += Math.cos(backAngle) * 13;
+                    entity.vy += Math.sin(backAngle) * 13;
+                    abilityTriggered.r = false;
+                }
+                if (abilityTriggered.f && entity.vanishCd <= 0 && !entity.invisible) {
+                    entity.invisible = true; entity.invisTimer = 1500; entity.vanishCd = 30000;
+                    addChat("Lennard VANISHED");
+                    textPop(entity.x, entity.y - 30, "VANISH!", "#aaaaff");
+                    abilityTriggered.f = false;
+                }
+                // Blink not mapped, could use another key, but we'll skip for now
+            } else if (entity.role === "healer") {
+                if (abilityTriggered.q && entity.bashCd <= 0) {
+                    entity.bashCd = 800;
+                    if (dist(entity, robin) < entity.size/2 + robin.size/2 + 30) damage(robin, 10, entity.x, entity.y);
+                    abilityTriggered.q = false;
+                }
+                if (abilityTriggered.e && entity.healAuraCd <= 0 && !entity.healAuraActive) {
+                    entity.healAuraActive = true; entity.healAuraTimer = 4000; entity.healAuraCd = 11000;
+                    burst(entity.x, entity.y, "#88ff88", 50);
+                    addChat("Erim HEALING AURA");
+                    abilityTriggered.e = false;
+                }
+                if (abilityTriggered.r && entity.shieldAllyCd <= 0) {
+                    // shield lowest ally
+                    let target = null, lowestHp = Infinity;
+                    for (const ally of runners) {
+                        if (!ally.alive || ally === entity) continue;
+                        if (ally.hp < lowestHp && ally.shield < 20) { lowestHp = ally.hp; target = ally; }
+                    }
+                    if (target) {
+                        entity.shieldAllyCd = 12000;
+                        target.shield = Math.min(40, target.shield + 30);
+                        textPop(target.x, target.y - 30, "PROTECTED", "#bb66ff");
+                        addChat(`Erim shielded ${target.type}`);
+                    }
+                    abilityTriggered.r = false;
+                }
+                if (abilityTriggered.f && entity.smashCd <= 0 && !entity.smashIndicator) {
+                    entity.smashIndicator = { timer: 600, x: entity.x, y: entity.y };
+                    addSkillshot(entity.x, entity.y, 0, "rgba(139,69,19,0.5)", 600);
+                    abilityTriggered.f = false;
+                }
+            }
+            // Clear triggers
+            abilityTriggered.q = abilityTriggered.e = abilityTriggered.r = abilityTriggered.f = false;
+
+            // Player-controlled invisible timer update
+            if (entity.invisible) {
+                entity.invisTimer -= dt;
+                if (entity.invisTimer <= 0) entity.invisible = false;
+            }
+            // Player-controlled heal aura
+            if (entity.healAuraActive) {
+                entity.healAuraTimer -= dt;
+                if (Math.floor(performance.now() / 250) % 2 === 0) {
+                    for (const ally of runners) {
+                        if (!ally.alive || ally.invisible) continue;
+                        if (dist(entity, ally) < 140) heal(ally, 2);
+                    }
+                    heal(entity, 3);
+                }
+                if (entity.healAuraTimer <= 0) { entity.healAuraActive = false; entity.healAuraCd = 11000; burst(entity.x, entity.y, "#88ff88", 30); addChat("Erim healing aura ended"); }
+            }
+            // Player-controlled panic indicator
+            if (entity.panicIndicator) {
+                entity.panicIndicator.timer -= dt;
+                if (entity.panicIndicator.timer <= 0) {
+                    if (entity.panicShotCd <= 0 && robin.alive && !entity.invisible) {
+                        shoot(entity, entity.x, entity.y, Math.atan2(robin.y - entity.y, robin.x - entity.x), 15, 24, "#ffee55", 9, "rail");
+                        entity.vx -= Math.cos(entity.facing) * 10; entity.vy -= Math.sin(entity.facing) * 10;
+                        burst(entity.x, entity.y, "#ffee55", 25);
+                        entity.panicShotCd = 4200;
+                        addChat("Lennard PANIC SHOT");
+                    }
+                    entity.panicIndicator = null;
+                }
+            }
+            // Player-controlled slam telegraph
+            if (entity.slamTelegraph) {
+                entity.slamTelegraph.remaining -= dt;
+                if (entity.slamTelegraph.remaining <= 0) {
+                    const cx = entity.slamTelegraph.x, cy = entity.slamTelegraph.y;
+                    for (const r of runners) {
+                        if (!r.alive || r.invisible) continue;
+                        if (dist({ x: cx, y: cy }, r) < 160) damage(r, 30, cx, cy);
+                    }
+                    burst(cx, cy, "#ff4444", 50);
+                    addChat("Robin used SLAM!");
+                    addShake(14);
+                    entity.slamTelegraph = null;
+                }
+            }
+            // Player-controlled smash indicator
+            if (entity.smashIndicator) {
+                entity.smashIndicator.timer -= dt;
+                if (entity.smashIndicator.timer <= 0) {
+                    entity.smashCd = 9000;
+                    const sx = entity.smashIndicator.x, sy = entity.smashIndicator.y;
+                    if (robin.alive && dist({x:sx,y:sy}, robin) < 120) damage(robin, 18, sx, sy);
+                    burst(sx, sy, "#8B4513", 30); addShake(5); addChat("Erim EARTH SMASH"); entity.smashIndicator = null;
+                }
+            }
+            // Player-controlled charge
+            if (entity.charging) {
+                entity.chargeTimer -= dt;
+                if (entity.chargeTimer <= 0) {
+                    entity.charging = false; entity.chargeCd = 8000;
+                    if (robin.alive) {
+                        const angle = Math.atan2(robin.y - entity.y, robin.x - entity.x);
+                        shoot(entity, entity.x, entity.y, angle, 12, 25, "#ff5500", 7, "charged");
+                        addChat("Leif CHARGED SHOT");
+                        addShake(3);
+                    }
+                }
+            }
+        }
+
+        // ========== MAIN UPDATES ==========
         function updateProjectiles(dt) {
             for (let i = projectiles.length - 1; i >= 0; i--) {
                 const p = projectiles[i];
@@ -786,14 +964,12 @@
                 p.life -= dt;
 
                 if (p.x < -50 || p.x > canvas.width + 50 || p.y < -50 || p.y > canvas.height + 50) {
-                    projectiles.splice(i, 1);
-                    continue;
+                    projectiles.splice(i, 1); continue;
                 }
 
                 if (p.owner !== robin && robin.alive && dist(p, robin) < robin.size * 0.45) {
                     damage(robin, p.damage, p.x, p.y);
-                    projectiles.splice(i, 1);
-                    continue;
+                    projectiles.splice(i, 1); continue;
                 }
 
                 if (p.owner === robin) {
@@ -801,8 +977,7 @@
                         if (!r.alive || r.invisible) continue;
                         if (dist(p, r) < r.size * 0.45) {
                             damage(r, p.damage, p.x, p.y);
-                            projectiles.splice(i, 1);
-                            break;
+                            projectiles.splice(i, 1); break;
                         }
                     }
                 }
@@ -811,7 +986,6 @@
             }
         }
 
-        // ---------- POWERUPS ----------
         function updatePowerups(dt) {
             for (let i = powerups.length - 1; i >= 0; i--) {
                 const p = powerups[i];
@@ -827,8 +1001,7 @@
                     if (dist(r, p) < 35) {
                         applyPowerup(r, p.type);
                         powerups.splice(i, 1); spawnPowerup();
-                        collected = true;
-                        break;
+                        collected = true; break;
                     }
                 }
                 if (collected) continue;
@@ -870,7 +1043,6 @@
             }
         }
 
-        // ---------- VICTORY CONDITION ----------
         function checkVictory() {
             if (robinVictory) return;
             if (!robin.alive) return;
@@ -906,7 +1078,7 @@
             burst(robin.x, robin.y, "#ffffff", 60);
         }
 
-        // ---------- RENDERING ----------
+        // ========== RENDERING ==========
         function drawBackground() {
             let grad;
             if (backgroundStyle === "red") {
@@ -963,6 +1135,99 @@
             ctx.fillRect(entity.x - 25, entity.y - entity.size / 2 - 16, 50 * (entity.hp / entity.maxHp), 6);
         }
 
+        function drawCooldownBar(x, y, w, h, progress) {
+            ctx.fillStyle = "rgba(0,0,0,0.7)";
+            ctx.fillRect(x, y, w, h);
+            ctx.fillStyle = "rgba(255,255,255,0.8)";
+            ctx.fillRect(x, y, w * progress, h);
+        }
+
+        function drawPlayerHUD(entity) {
+            if (!entity.alive) return;
+            const x = entity.x - 50, y = entity.y + entity.size/2 + 10;
+            ctx.font = "10px Arial";
+            ctx.fillStyle = "white";
+            ctx.fillText("Q E R F", x, y);
+            // Abilities cooldowns
+            const abilities = [];
+            if (entity === robin) {
+                abilities.push({ name: "Slash", cd: entity.slashCd, maxCd: 600 });
+                abilities.push({ name: "Orb", cd: entity.orbCd, maxCd: 2200 });
+                abilities.push({ name: "Dash", cd: entity.dashCd, maxCd: 3600 });
+                abilities.push({ name: "Slam", cd: entity.slamCd, maxCd: 8500 });
+            } else if (entity.role === "midrange") {
+                abilities.push({ name: "Kunai", cd: entity.kunaiCd, maxCd: 900 });
+                abilities.push({ name: "Zap", cd: entity.zapCd, maxCd: 450 });
+                abilities.push({ name: "Evade", cd: entity.evadeCd, maxCd: 2200 });
+                abilities.push({ name: "Charge", cd: entity.chargeCd, maxCd: 8000 });
+            } else if (entity.role === "sniper") {
+                abilities.push({ name: "Snipe", cd: entity.snipeCd, maxCd: 600 });
+                abilities.push({ name: "Panic", cd: entity.panicShotCd, maxCd: 4200 });
+                abilities.push({ name: "Dodge", cd: entity.dodgeCd, maxCd: 2200 });
+                abilities.push({ name: "Vanish", cd: entity.vanishCd, maxCd: 30000 });
+            } else if (entity.role === "healer") {
+                abilities.push({ name: "Bash", cd: entity.bashCd, maxCd: 800 });
+                abilities.push({ name: "Aura", cd: entity.healAuraCd, maxCd: 11000 });
+                abilities.push({ name: "Shield", cd: entity.shieldAllyCd, maxCd: 12000 });
+                abilities.push({ name: "Smash", cd: entity.smashCd, maxCd: 9000 });
+            }
+            for (let i = 0; i < abilities.length; i++) {
+                const ay = y + 14 + i * 14;
+                ctx.fillStyle = "white";
+                ctx.fillText(abilities[i].name, x, ay);
+                drawCooldownBar(x + 45, ay - 10, 40, 8, Math.max(0, 1 - abilities[i].cd / abilities[i].maxCd));
+            }
+        }
+
+        function drawCharacterSelectBar() {
+            const barHeight = 60;
+            const barY = canvas.height - barHeight;
+            ctx.fillStyle = "rgba(0,0,0,0.6)";
+            ctx.fillRect(0, barY, canvas.width, barHeight);
+            const chars = [robin, runners[0], runners[1], runners[2]];
+            const colors = ["#ff4444", "#ffaa66", "#66ccff", "#88ff88"];
+            const names = ["Robin", "Leif", "Lennard", "Erim"];
+            for (let i = 0; i < chars.length; i++) {
+                const cx = canvas.width/5 * (i+0.5);
+                const cy = barY + 30;
+                // Draw portrait
+                ctx.beginPath();
+                ctx.arc(cx, cy, 20, 0, Math.PI*2);
+                ctx.fillStyle = colors[i];
+                ctx.fill();
+                ctx.fillStyle = "white";
+                ctx.font = "10px Arial";
+                ctx.fillText(names[i], cx-15, cy+35);
+                // Health bar
+                const hp = chars[i].alive ? chars[i].hp / chars[i].maxHp : 0;
+                drawCooldownBar(cx-20, cy+40, 40, 6, hp);
+                // Highlight controlled
+                if (controlledChar === chars[i]) {
+                    ctx.strokeStyle = "white";
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, 22, 0, Math.PI*2);
+                    ctx.stroke();
+                }
+            }
+            // Click detection will be added via canvas click event
+        }
+
+        // ========== MOUSE CLICK FOR CHARACTER SELECT ==========
+        canvas.addEventListener("click", (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+            const barY = canvas.height - 60;
+            if (my >= barY) {
+                const idx = Math.floor(mx / (canvas.width/4));
+                const chars = [robin, runners[0], runners[1], runners[2]];
+                if (idx >= 0 && idx < 4 && chars[idx].alive) {
+                    controlledChar = chars[idx];
+                }
+            }
+        });
+
         function drawStats() {
             if (!infiniteMode) return;
             ctx.fillStyle = "rgba(0,0,0,0.6)";
@@ -1010,12 +1275,7 @@
                 ctx.beginPath();
                 ctx.strokeStyle = s.color;
                 ctx.lineWidth = 3;
-                if (s.radius === 0) {
-                    // line indicator (for panic shot / charged shot) we use a small circle
-                    ctx.arc(s.x, s.y, 15 + (1 - s.life/s.maxLife)*30, 0, Math.PI*2);
-                } else {
-                    ctx.arc(s.x, s.y, s.radius * (1 - s.life/s.maxLife), 0, Math.PI*2);
-                }
+                ctx.arc(s.x, s.y, s.radius === 0 ? 15 + (1 - s.life/s.maxLife)*30 : s.radius * (1 - s.life/s.maxLife), 0, Math.PI*2);
                 ctx.stroke();
             }
             ctx.globalAlpha = 1;
@@ -1058,6 +1318,7 @@
                 const immunityFlash = (robin.immunity > 0 && Math.sin(performance.now()*0.02) > 0) ? 0.4 : 1;
                 drawImage(imgs.robin, robin.x, robin.y, robin.size, glow, immunityFlash, robin.facing*0.08);
                 drawHealth(robin, glow, dt);
+                if (controlledChar === robin) drawPlayerHUD(robin);
             } else {
                 drawImage(imgs.robin, robin.x, robin.y, robin.size, "#ffffff", 0.3, performance.now()*0.001);
                 if (!infiniteMode && !robinVictory) {
@@ -1071,7 +1332,6 @@
             for (const r of runners) {
                 if (!r.alive) continue;
                 if (r.invisible) {
-                    // Shimmer effect for invisible Lennard
                     ctx.globalAlpha = 0.3 + Math.sin(performance.now()*0.02)*0.15;
                     ctx.beginPath();
                     ctx.arc(r.x, r.y, r.size/2, 0, Math.PI*2);
@@ -1085,23 +1345,20 @@
                 if (r.role === "healer") glow = "#88ff88";
                 if (r.role === "sniper") glow = "#66ccff";
                 if (r.role === "midrange") glow = "#ffaa66";
-                drawImage(imgs[r.name], r.x, r.y, r.size, glow,
+                drawImage(imgs[r.type], r.x, r.y, r.size, glow,
                     r.immunity > 0 ? 0.5 + Math.sin(performance.now()*0.02)*0.3 : 1,
                     Math.sin(performance.now()*0.002 + r.x)*0.05);
                 drawHealth(r, glow, dt);
+                if (controlledChar === r) drawPlayerHUD(r);
                 if (r.role === "healer" && r.healAuraActive) {
                     ctx.strokeStyle = "rgba(136,255,136,0.4)";
                     ctx.lineWidth = 4;
-                    ctx.beginPath();
-                    ctx.arc(r.x, r.y, 140, 0, Math.PI*2);
-                    ctx.stroke();
+                    ctx.beginPath(); ctx.arc(r.x, r.y, 140, 0, Math.PI*2); ctx.stroke();
                 }
                 if (r.shield > 0) {
                     ctx.strokeStyle = "#bb66ff";
                     ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    ctx.arc(r.x, r.y, r.size*0.8, 0, Math.PI*2);
-                    ctx.stroke();
+                    ctx.beginPath(); ctx.arc(r.x, r.y, r.size*0.8, 0, Math.PI*2); ctx.stroke();
                 }
                 if (!robin.alive && !robinVictory && !infiniteMode) {
                     ctx.strokeStyle = `hsla(${(performance.now()*0.08+r.x)%360},100%,70%,0.7)`;
@@ -1123,6 +1380,7 @@
 
             drawChat();
             drawStats();
+            drawCharacterSelectBar();
 
             if (robinVictory) {
                 ctx.fillStyle = `rgba(0,0,0,${0.3+Math.sin(performance.now()*0.01)*0.1})`;
@@ -1139,7 +1397,7 @@
         let last = performance.now();
         function loop(now) {
             const rawDt = now - last;
-            const dt = Math.min(rawDt, 35) * gameSpeed;  // apply speed multiplier
+            const dt = Math.min(rawDt, 35) * gameSpeed;
             last = now;
 
             if (robinVictory) {
@@ -1152,8 +1410,20 @@
                 return;
             }
 
-            updateRobin(dt);
-            for (const r of runners) updateRunner(r, dt);
+            // AI or player control
+            if (controlledChar === robin) {
+                updatePlayerControl(robin, dt);
+            } else {
+                updateRobinAI(dt);
+            }
+            for (const r of runners) {
+                if (controlledChar === r) {
+                    updatePlayerControl(r, dt);
+                } else {
+                    updateRunnerAI(r, dt);
+                }
+            }
+
             updateProjectiles(dt);
             updatePowerups(dt);
             updateParticles(dt);
